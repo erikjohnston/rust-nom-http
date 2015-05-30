@@ -1,0 +1,7 @@
+[package]
+name = "nom_http"
+version = "0.0.1"
+authors = ["Erik Johnston"]
+
+[dependencies]
+nom = "0.3.1"
