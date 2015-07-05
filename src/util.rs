@@ -2,10 +2,8 @@
 #[derive(Debug)]
 pub enum IntegerDecodeError { TooLong, InvalidChar }
 
-use std::usize;
-
 pub fn hex_buf_to_int(buf: &[u8]) -> Result<usize, IntegerDecodeError> {
-    if buf.len() * 4 >= usize::BITS {
+    if buf.len() >= 8 {  // TODO: Replace with usize::BITS
         // Won't fit into a u64
         println!("Too long");
         return Err(IntegerDecodeError::TooLong);
@@ -35,7 +33,7 @@ pub fn hex_buf_to_int(buf: &[u8]) -> Result<usize, IntegerDecodeError> {
 
 pub fn dec_buf_to_int(buf: &[u8]) -> Result<usize, IntegerDecodeError> {
     // 2^N > 10^X => N > X log2 (10) > 3.32 X > 3 X
-    if buf.len() * 4 >= usize::BITS {
+    if buf.len() >= 8 {
         // Won't fit into a u64
         println!("Too long");
         return Err(IntegerDecodeError::TooLong);

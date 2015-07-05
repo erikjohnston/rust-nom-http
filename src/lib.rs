@@ -1,5 +1,3 @@
-#![feature(core)]
-#![allow(dead_code)]
 
 use std::ascii::AsciiExt;
 

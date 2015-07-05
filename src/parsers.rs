@@ -5,7 +5,7 @@ use util::hex_buf_to_int;
 
 
 named!(not_space, take_until_either!(" \t"));
-named!(not_space_or_colon, take_until_either!(" \t:"));
+// named!(not_space_or_colon, take_until_either!(" \t:"));
 named!(
     token,
     is_a!("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!#$%&'*+-^_`|-")
