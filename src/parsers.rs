@@ -4,12 +4,55 @@ use nom::{IResult, Needed, Err, space, digit};
 use util::hex_buf_to_int;
 
 
-named!(not_space, take_until_either!(" \t"));
+// named!(not_space, take_until_either!(" \t"));
 // named!(not_space_or_colon, take_until_either!(" \t:"));
-named!(
-    token,
-    is_a!("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!#$%&'*+-^_`|-")
-);
+// named!(
+//     token,
+//     is_a!("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!#$%&'*+-^_`|-")
+// );
+
+
+fn not_space(input: &[u8]) -> IResult<&[u8], &[u8]> {
+    for idx in 0..input.len() {
+        match input[idx] {
+            b' ' | b'\t' => return IResult::Done(&input[idx..], &input[..idx]),
+            b'\n' | b'\r' => return IResult::Error(Err::Code(0)),
+            _ => continue,
+        }
+    }
+    IResult::Incomplete(Needed::Size(1))
+}
+
+fn token(input: &[u8]) -> IResult<&[u8], &[u8]> {
+    for idx in 0..input.len() {
+        match input[idx] {
+            33 | 35...39 | 42 | 43 | 45 | 48...57 | 65...90 | 94...122 | 124 => continue,
+            _ => return IResult::Done(&input[idx..], &input[..idx]),
+        }
+    }
+    IResult::Incomplete(Needed::Size(1))
+}
+
+fn hexdigit(input: &[u8]) -> IResult<&[u8], &[u8]> {
+    for idx in 0..input.len() {
+        match input[idx] {
+            48...57 | 65...90 | 94...122 => continue,
+            _ => return IResult::Done(&input[idx..], &input[..idx]),
+        }
+    }
+    IResult::Incomplete(Needed::Size(1))
+}
+
+fn not_space_or_semicolon(input: &[u8]) -> IResult<&[u8], &[u8]> {
+    for idx in 0..input.len() {
+        match input[idx] {
+            b' ' | b'\t' | b';' | b'\n' | b'\r' => return IResult::Done(&input[idx..], &input[..idx]),
+            _ => continue,
+        }
+    }
+    IResult::Incomplete(Needed::Size(1))
+}
+
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct RequestLine<'r> {
@@ -83,6 +126,7 @@ named!(
 
 
 fn quoted_string(buf: &[u8]) -> IResult<&[u8], &[u8]> {
+    println!("Quoted string: {:?}", String::from_utf8_lossy(buf));
     if buf.len() == 0 {
         return IResult::Incomplete(Needed::Size(1));
     }
@@ -119,7 +163,7 @@ named!(
         tag!("=")   ~
         space?      ~
         value: alt!(
-            quoted_string | take_until_either!(" \t;\r\n")
+            quoted_string | not_space_or_semicolon
         )           ,
         || value
     )
@@ -147,6 +191,31 @@ named!(
     )
 );
 
+fn many_chunk_params(input: &[u8]) -> IResult<&[u8], Vec<(&[u8], Option<&[u8]>)>> {
+    let mut begin = 0;
+    let mut remaining = input.len();
+    let mut res = Vec::new();
+    loop {
+        match chunk_parameter(&input[begin..]) {
+            IResult::Done(i, o) => {
+                if i.len() == input[begin..].len() {
+                    break;
+                }
+                res.push(o);
+                begin += remaining - i.len();
+                remaining = i.len();
+            },
+            IResult::Incomplete(s) => {
+                return IResult::Incomplete(s);
+            },
+            _ => {
+                break;
+            }
+        }
+    }
+    IResult::Done(&input[begin..], res)
+}
+
 #[derive(Debug, PartialEq)]
 pub struct ChunkHeader<'r> {
     pub parameters: Vec<(&'r[u8], Option<&'r[u8]>)>,
@@ -157,11 +226,11 @@ named!(
     pub chunk_parser <&[u8], ChunkHeader>,
     chain!(
         size: map_res!(
-            is_a!("0123456789ABCDEFabcdef"),
+            hexdigit,
             hex_buf_to_int
         )                                       ~
         space?                                  ~
-        values: many0!(chunk_parameter)         ~
+        values: many_chunk_params               ~
         space?                                  ~
         tag!("\r")?                             ~
         tag!("\n")                              ,
@@ -260,4 +329,39 @@ fn test_take_header() {
         take_header_value(b"wibble\r\nabc"),
         IResult::Done(&b"\r\nabc"[..], &b"wibble"[..])
     );
+}
+
+#[test]
+fn test_request_line_incomplete() {
+    let incomplete = [
+        &b"G"[..],
+        &b"GET"[..],
+        &b"GET /"[..],
+        &b"GET /asad/ HTTP/1.1"[..],
+    ];
+
+    for i in incomplete.iter() {
+        let res = request_line(i);
+        match res {
+            IResult::Incomplete(_) => {},
+            d@ _ => panic!("Not incomplete: {:?}: {:?}", String::from_utf8_lossy(i), d)
+        }
+    }
+}
+
+#[test]
+fn test_chunk_param_incomplete() {
+    let incomplete = [
+        &b"5;"[..],
+        &b"5; fo"[..],
+        &b"5; foo="[..],
+    ];
+
+    for i in incomplete.iter() {
+        let res = chunk_parser(i);
+        match res {
+            IResult::Incomplete(_) => {},
+            d@ _ => panic!("Not incomplete: {:?}: {:?}", String::from_utf8_lossy(i), d)
+        }
+    }
 }
