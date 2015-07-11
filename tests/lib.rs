@@ -23,27 +23,31 @@ macro_rules! create_test {
                 // to concat identifiers
                 let input = $input_expr;
                 {
-                    let mut cb = TestHttpCallback::new();
                     let mut http_parser = HttpParser::new();
-                    http_parser.parse_http(
-                        &mut cb,
-                        input
-                    ).unwrap();
-                    assert_eq!($expected, cb);
+                    for _ in 0..3 {  // Tests to ensure we can run the parser multiple times
+                        let mut cb = TestHttpCallback::new();
+                        http_parser.parse_http(
+                            &mut cb,
+                            input
+                        ).unwrap();
+                        assert_eq!($expected, cb);
+                    }
                 }
                 {
-                    let mut cb = TestHttpCallback::new();
                     let mut http_parser = HttpParser::new();
 
-                    let mut start = 0;
-                    for i in 1..input.len() + 1 {
-                        println!("Input: {:?}", String::from_utf8_lossy(&input[start..i]));
-                        start += http_parser.parse_http(
-                            &mut cb,
-                            &input[start..i],
-                        ).unwrap();
+                    for _ in 0..3 {  // Tests to ensure we can run the parser multiple times
+                        let mut cb = TestHttpCallback::new();
+                        let mut start = 0;
+                        for i in 1..input.len() + 1 {
+                            println!("Input: {:?}", String::from_utf8_lossy(&input[start..i]));
+                            start += http_parser.parse_http(
+                                &mut cb,
+                                &input[start..i],
+                            ).unwrap();
+                        }
+                        assert_eq!($expected, cb);
                     }
-                    assert_eq!($expected, cb);
                 }
             }
         )*)*

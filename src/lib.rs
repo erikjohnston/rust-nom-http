@@ -213,6 +213,8 @@ impl HttpParser {
             ParserState::Done => {
                 // TODO: Reset things.
                 cb.on_end();
+                self.body_type = BodyType::EOF;
+                self.body_finished = false;
                 (0, ParserState::RequestLine)
             }
         };

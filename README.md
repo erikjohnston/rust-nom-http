@@ -18,6 +18,6 @@ Stuff left to do:
 - [ ] Responses
 - [ ] Fixup API
   - [x] Proper error handling
-  - [ ] Allow parser to be reused
+  - [x] Allow parser to be reused
 - [ ] Ability to pause parser
 - [ ] Ability to consume, but discard, the rest of the HTTP Message
