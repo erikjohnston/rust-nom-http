@@ -60,7 +60,7 @@ impl HttpParser {
         }
     }
 
-    pub fn parse_http(&mut self, cb: &mut HttpCallbacks, input: &[u8]) -> HttpParserResult {
+    pub fn parse_http<T : HttpCallbacks>(&mut self, cb: &mut T, input: &[u8]) -> HttpParserResult {
         let mut curr_input = input;
         loop {
             let (size, next_state) = try!(self.parse_http_inner(cb, curr_input));
@@ -73,7 +73,7 @@ impl HttpParser {
         }
     }
 
-    fn parse_http_inner(&mut self, cb: &mut HttpCallbacks, input: &[u8]) -> Result<(usize, ParserState), HttpParserError> {
+    fn parse_http_inner<T : HttpCallbacks>(&mut self, cb: &mut T, input: &[u8]) -> Result<(usize, ParserState), HttpParserError> {
         let res = match self.current_state {
             ParserState::RequestLine => {
                 match parsers::request_line(input) {
