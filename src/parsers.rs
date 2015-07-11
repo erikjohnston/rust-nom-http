@@ -44,6 +44,7 @@ fn hexdigit(input: &[u8]) -> IResult<&[u8], &[u8]> {
 }
 
 fn not_space_or_semicolon(input: &[u8]) -> IResult<&[u8], &[u8]> {
+    println!("not_space_or_semicolon: {:?}", String::from_utf8_lossy(input));
     for idx in 0..input.len() {
         match input[idx] {
             b' ' | b'\t' | b';' | b'\n' | b'\r' => return IResult::Done(&input[idx..], &input[..idx]),
@@ -125,14 +126,13 @@ named!(
 );
 
 
-fn quoted_string(buf: &[u8]) -> IResult<&[u8], &[u8]> {
-    println!("Quoted string: {:?}", String::from_utf8_lossy(buf));
+fn quoted_string_or_token(buf: &[u8]) -> IResult<&[u8], &[u8]> {
     if buf.len() == 0 {
         return IResult::Incomplete(Needed::Size(1));
     }
 
     if buf[0] != b'"' {
-        return IResult::Error(Err::Code(0));
+        return not_space_or_semicolon(buf);
     }
 
     let mut idx = 1;
@@ -162,9 +162,7 @@ named!(
     chain!(
         tag!("=")   ~
         space?      ~
-        value: alt!(
-            quoted_string | not_space_or_semicolon
-        )           ,
+        value: quoted_string_or_token,
         || value
     )
 );
