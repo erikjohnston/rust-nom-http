@@ -30,10 +30,10 @@ enum ParserState {
 enum ChunkedState { Header, Data(usize), DataEnd }
 
 #[derive(PartialEq,Eq,Debug,Clone,Copy)]
-enum BodyTypeState { Lenth(usize), Chunked(ChunkedState), EOF }
+enum BodyTypeState { Lenth(usize), Chunked(ChunkedState), EOF, NoBody }
 
 #[derive(PartialEq,Eq,Debug,Clone,Copy)]
-pub enum BodyType { Length(usize), Chunked, EOF }
+pub enum BodyType { Length(usize), Chunked, EOF, NoBody }
 
 
 pub trait HttpCallbacks {
@@ -55,7 +55,7 @@ impl HttpParser {
     pub fn new() -> HttpParser {
         HttpParser{
             current_state: ParserState::RequestLine,
-            body_type: BodyType::EOF,
+            body_type: BodyType::NoBody,
             body_finished: false
         }
     }
@@ -115,6 +115,7 @@ impl HttpParser {
                                 BodyType::Chunked => BodyTypeState::Chunked(ChunkedState::Header),
                                 BodyType::Length(len) => BodyTypeState::Lenth(len),
                                 BodyType::EOF => BodyTypeState::EOF,
+                                BodyType::NoBody => BodyTypeState::NoBody,
                             };
 
                             (input.len() - i.len(), ParserState::Body(body_state))
@@ -208,12 +209,13 @@ impl HttpParser {
                         cb.on_chunk(input);
                         (input.len(), self.current_state)
                     },
+                    BodyTypeState::NoBody => (0, ParserState::Done),
                 }
             },
             ParserState::Done => {
                 // TODO: Reset things.
                 cb.on_end();
-                self.body_type = BodyType::EOF;
+                self.body_type = BodyType::NoBody;
                 self.body_finished = false;
                 (0, ParserState::RequestLine)
             }
