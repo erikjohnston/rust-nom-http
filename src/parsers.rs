@@ -44,7 +44,6 @@ fn hexdigit(input: &[u8]) -> IResult<&[u8], &[u8]> {
 }
 
 fn not_space_or_semicolon(input: &[u8]) -> IResult<&[u8], &[u8]> {
-    println!("not_space_or_semicolon: {:?}", String::from_utf8_lossy(input));
     for idx in 0..input.len() {
         match input[idx] {
             b' ' | b'\t' | b';' | b'\n' | b'\r' => return IResult::Done(&input[idx..], &input[..idx]),
