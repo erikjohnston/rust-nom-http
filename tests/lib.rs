@@ -24,7 +24,7 @@ macro_rules! create_test {
                 http_parser.parse_http(
                     &mut cb,
                     $input
-                );
+                ).unwrap();
                 assert_eq!($expected, cb);
             }
         )*)*
@@ -93,7 +93,9 @@ Hello
 fn test_consumer() {
     let mut cb = TestHttpCallback::new();
     let mut http_parser = HttpParser::new();
-    http_parser.parse_http(&mut cb, b"GET /test_url/ HTTP/1.0\r\nContent-Length: 5\r\n\r\nHello");
+    http_parser.parse_http(
+        &mut cb, b"GET /test_url/ HTTP/1.0\r\nContent-Length: 5\r\n\r\nHello"
+    ).unwrap();
 
     assert_eq!("GET", cb.method);
     assert_eq!("/test_url/", &cb.path);

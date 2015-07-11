@@ -17,7 +17,7 @@ Stuff left to do:
     - [ ] Expose chunk params in API
 - [ ] Responses
 - [ ] Fixup API
-  - [ ] Proper error handling
+  - [x] Proper error handling
   - [ ] Allow parser to be reused
 - [ ] Ability to pause parser
 - [ ] Ability to consume, but discard, the rest of the HTTP Message
