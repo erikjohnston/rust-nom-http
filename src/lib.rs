@@ -63,7 +63,20 @@ impl HttpParser {
     pub fn parse_http<T: HttpCallbacks>(&mut self, cb: &mut T, input: &[u8]) -> HttpParserResult {
         let mut curr_input = input;
         loop {
-            let (size, next_state) = try!(self.parse_http_inner(cb, curr_input));
+            let (size, next_state) = match self.current_state {
+                ParserState::RequestLine => try!(self.parse_request_line(cb, curr_input)),
+                ParserState::Headers => try!(self.parse_header(cb, curr_input)),
+                ParserState::HeaderEnd => try!(self.parse_header_end(cb, curr_input)),
+                ParserState::Body(body_type) => try!(self.parse_body(cb, curr_input, body_type)),
+                ParserState::Done => {
+                    // TODO: Reset things.
+                    cb.on_end(self);
+                    self.body_type = BodyType::NoBody;
+                    self.body_finished = false;
+                    self.current_state = ParserState::RequestLine;
+                    return Ok(input.len() - curr_input.len());
+                }
+            };
             if size > 0 || next_state != self.current_state {
                 self.current_state = next_state;
                 curr_input = &curr_input[size..];
@@ -217,24 +230,6 @@ impl HttpParser {
             },
             BodyTypeState::NoBody => (0, ParserState::Done),
         })
-    }
-
-    fn parse_http_inner<T: HttpCallbacks>(&mut self, cb: &mut T, input: &[u8]) -> Result<(usize, ParserState), HttpParserError> {
-        let res = match self.current_state {
-            ParserState::RequestLine => try!(self.parse_request_line(cb, input)),
-            ParserState::Headers => try!(self.parse_header(cb, input)),
-            ParserState::HeaderEnd => try!(self.parse_header_end(cb, input)),
-            ParserState::Body(body_type) => try!(self.parse_body(cb, input, body_type)),
-            ParserState::Done => {
-                // TODO: Reset things.
-                cb.on_end(self);
-                self.body_type = BodyType::NoBody;
-                self.body_finished = false;
-                (0, ParserState::RequestLine)
-            }
-        };
-
-        Ok(res)
     }
 }
 
