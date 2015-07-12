@@ -23,11 +23,46 @@ fn not_space(input: &[u8]) -> IResult<&[u8], &[u8]> {
     IResult::Incomplete(Needed::Size(1))
 }
 
-fn token(input: &[u8]) -> IResult<&[u8], &[u8]> {
+const LOOKUP_TOKEN : [bool; 256] = [
+false, false, false, false, false, false, false, false,
+false, false, false, false, false, false, false, false,
+false, false, false, false, false, false, false, false,
+false, false, false, false, false, false, false, false,
+false, true, false, false, false, false, false, false,
+false, false, true, true, false, true, false, false,
+true, true, true, true, true, true, true, true,
+true, true, false, false, false, false, false, false,
+false, true, true, true, true, true, true, true,
+true, true, true, true, true, true, true, true,
+true, true, true, true, true, true, true, true,
+true, true, true, false, false, false, true, true,
+true, true, true, true, true, true, true, true,
+true, true, true, true, true, true, true, true,
+true, true, true, true, true, true, true, true,
+true, true, true, false, true, false, false, false,
+false, false, false, false, false, false, false, false,
+false, false, false, false, false, false, false, false,
+false, false, false, false, false, false, false, false,
+false, false, false, false, false, false, false, false,
+false, false, false, false, false, false, false, false,
+false, false, false, false, false, false, false, false,
+false, false, false, false, false, false, false, false,
+false, false, false, false, false, false, false, false,
+false, false, false, false, false, false, false, false,
+false, false, false, false, false, false, false, false,
+false, false, false, false, false, false, false, false,
+false, false, false, false, false, false, false, false,
+false, false, false, false, false, false, false, false,
+false, false, false, false, false, false, false, false,
+false, false, false, false, false, false, false, false,
+false, false, false, false, false, false, false, false,
+];
+
+
+fn token(input: &[u8]) -> IResult<&[u8], &[u8]>  {
     for idx in 0..input.len() {
-        match input[idx] {
-            33 | 35...39 | 42 | 43 | 45 | 48...57 | 65...90 | 94...122 | 124 => continue,
-            _ => return IResult::Done(&input[idx..], &input[..idx]),
+        if !LOOKUP_TOKEN[input[idx] as usize] {
+            return IResult::Done(&input[idx..], &input[..idx]);
         }
     }
     IResult::Incomplete(Needed::Size(1))

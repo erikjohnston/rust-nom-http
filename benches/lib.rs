@@ -94,6 +94,61 @@ benchmark_strings! {
 }
 
 
+const LOOKUP_TOKEN : [bool; 256] = [
+false, false, false, false, false, false, false, false,
+false, false, false, false, false, false, false, false,
+false, false, false, false, false, false, false, false,
+false, false, false, false, false, false, false, false,
+false, true, false, false, false, false, false, false,
+false, false, true, true, false, true, false, false,
+true, true, true, true, true, true, true, true,
+true, true, false, false, false, false, false, false,
+false, true, true, true, true, true, true, true,
+true, true, true, true, true, true, true, true,
+true, true, true, true, true, true, true, true,
+true, true, true, false, false, false, true, true,
+true, true, true, true, true, true, true, true,
+true, true, true, true, true, true, true, true,
+true, true, true, true, true, true, true, true,
+true, true, true, false, true, false, false, false,
+false, false, false, false, false, false, false, false,
+false, false, false, false, false, false, false, false,
+false, false, false, false, false, false, false, false,
+false, false, false, false, false, false, false, false,
+false, false, false, false, false, false, false, false,
+false, false, false, false, false, false, false, false,
+false, false, false, false, false, false, false, false,
+false, false, false, false, false, false, false, false,
+false, false, false, false, false, false, false, false,
+false, false, false, false, false, false, false, false,
+false, false, false, false, false, false, false, false,
+false, false, false, false, false, false, false, false,
+false, false, false, false, false, false, false, false,
+false, false, false, false, false, false, false, false,
+false, false, false, false, false, false, false, false,
+false, false, false, false, false, false, false, false,
+];
+
+
+fn token(input: &[u8]) -> bool {
+    for idx in 0..input.len() {
+        if !LOOKUP_TOKEN[input[idx] as usize] {
+            return true;
+        }
+    }
+    false
+}
+
+#[bench]
+fn token_bench(b: &mut test::Bencher) {
+    let input = b"ABadsfletjwklsdjfkjsdkgj'klejf;la";
+
+    b.iter(
+        || token(input)
+    );
+}
+
+
 // END TESTS
 
 
