@@ -121,7 +121,7 @@ impl TestHttpCallback {
 }
 
 impl HttpCallbacks for TestHttpCallback {
-    fn on_request_line(&mut self, request: &RequestLine) {
+    fn on_request_line(&mut self, parser: &mut HttpParser, request: &RequestLine) {
         // self.method = String::from_utf8(request.method.to_owned()).unwrap();
         // self.path = String::from_utf8(request.path.to_owned()).unwrap();
         // self.version = (
@@ -130,17 +130,17 @@ impl HttpCallbacks for TestHttpCallback {
         // );
     }
 
-    fn on_header(&mut self, name: &[u8], value: &[u8]) {
+    fn on_header(&mut self, parser: &mut HttpParser, name: &[u8], value: &[u8]) {
         // self.headers.insert(String::from_utf8(name.to_owned()).unwrap(), String::from_utf8(value.to_owned()).unwrap());
     }
 
-    fn on_message_begin(&mut self, body_type: BodyType) {}
+    fn on_message_begin(&mut self, parser: &mut HttpParser, body_type: BodyType) {}
 
-    fn on_chunk(&mut self, data: &[u8]) {
+    fn on_chunk(&mut self, parser: &mut HttpParser, data: &[u8]) {
         // self.chunks.push_str(str::from_utf8(data).unwrap());
     }
 
-    fn on_end(&mut self) {
+    fn on_end(&mut self, parser: &mut HttpParser) {
         self.finished = true;
     }
 }

@@ -37,11 +37,11 @@ pub enum BodyType { Length(usize), Chunked, EOF, NoBody }
 
 
 pub trait HttpCallbacks {
-    fn on_request_line(&mut self, request: &RequestLine);
-    fn on_header(&mut self, name: &[u8], value: &[u8]);
-    fn on_message_begin(&mut self, body_type: BodyType);
-    fn on_chunk(&mut self, data: &[u8]);
-    fn on_end(&mut self);
+    fn on_request_line(&mut self, parser: &mut HttpParser, request: &RequestLine);
+    fn on_header(&mut self, parser: &mut HttpParser, name: &[u8], value: &[u8]);
+    fn on_message_begin(&mut self, parser: &mut HttpParser, body_type: BodyType);
+    fn on_chunk(&mut self, parser: &mut HttpParser, data: &[u8]);
+    fn on_end(&mut self, parser: &mut HttpParser);
 }
 
 
@@ -80,7 +80,7 @@ impl HttpParser {
                     IResult::Error(_) => return Err(HttpParserError::BadFirstLine),
                     IResult::Incomplete(_) => (0, self.current_state),
                     IResult::Done(i, request) => {
-                        cb.on_request_line(&request);
+                        cb.on_request_line(self, &request);
                         (input.len() - i.len(), ParserState::Headers)
                     }
                 }
@@ -92,7 +92,7 @@ impl HttpParser {
                     },
                     IResult::Incomplete(_) => (0, self.current_state),
                     IResult::Done(i, (name, value)) => {
-                        cb.on_header(name, value);
+                        cb.on_header(self, name, value);
                         if let Some(body_type) = try!(body_type_from_header(name, value)) {
                             self.body_type = body_type;
                         }
@@ -109,7 +109,8 @@ impl HttpParser {
                             // We were dealing with trailing headers, so now we've finished.
                             (input.len() - i.len(), ParserState::Done)
                         } else {
-                            cb.on_message_begin(self.body_type);
+                            let body_type = self.body_type;
+                            cb.on_message_begin(self, body_type);
 
                             let body_state = match self.body_type {
                                 BodyType::Chunked => BodyTypeState::Chunked(ChunkedState::Header),
@@ -127,13 +128,13 @@ impl HttpParser {
                 match body_type {
                     BodyTypeState::Lenth(size) => {
                         if input.len() < size {
-                            cb.on_chunk(input);
+                            cb.on_chunk(self, input);
                             (
                                 input.len(),
                                 ParserState::Body(BodyTypeState::Lenth(size - input.len()))
                             )
                         } else {
-                            cb.on_chunk(&input[..size]);
+                            cb.on_chunk(self, &input[..size]);
                             (size, ParserState::Done)
                         }
                     },
@@ -160,7 +161,7 @@ impl HttpParser {
                             },
                             ChunkedState::Data(size) => {
                                 if input.len() < size {
-                                    cb.on_chunk(input);
+                                    cb.on_chunk(self, input);
                                     (
                                         input.len(),
                                         ParserState::Body(
@@ -173,7 +174,7 @@ impl HttpParser {
                                     )
                                 } else {
                                     if size > 0 {
-                                        cb.on_chunk(&input[..size]);
+                                        cb.on_chunk(self, &input[..size]);
                                         (
                                             size,
                                             ParserState::Body(
@@ -206,7 +207,7 @@ impl HttpParser {
                         }
                     },
                     BodyTypeState::EOF => {
-                        cb.on_chunk(input);
+                        cb.on_chunk(self, input);
                         (input.len(), self.current_state)
                     },
                     BodyTypeState::NoBody => (0, ParserState::Done),
@@ -214,7 +215,7 @@ impl HttpParser {
             },
             ParserState::Done => {
                 // TODO: Reset things.
-                cb.on_end();
+                cb.on_end(self);
                 self.body_type = BodyType::NoBody;
                 self.body_finished = false;
                 (0, ParserState::RequestLine)
