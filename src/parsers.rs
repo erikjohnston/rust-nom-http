@@ -13,8 +13,8 @@ use util::hex_buf_to_int;
 
 
 fn not_space(input: &[u8]) -> IResult<&[u8], &[u8]> {
-    for idx in 0..input.len() {
-        match input[idx] {
+    for (idx, chr) in input.iter().enumerate() {
+        match *chr {
             b' ' | b'\t' => return IResult::Done(&input[idx..], &input[..idx]),
             b'\n' | b'\r' => return IResult::Error(Err::Code(0)),
             _ => continue,
@@ -24,8 +24,8 @@ fn not_space(input: &[u8]) -> IResult<&[u8], &[u8]> {
 }
 
 fn token(input: &[u8]) -> IResult<&[u8], &[u8]> {
-    for idx in 0..input.len() {
-        match input[idx] {
+    for (idx, chr) in input.iter().enumerate() {
+        match *chr {
             33 | 35...39 | 42 | 43 | 45 | 48...57 | 65...90 | 94...122 | 124 => continue,
             _ => return IResult::Done(&input[idx..], &input[..idx]),
         }
@@ -34,8 +34,8 @@ fn token(input: &[u8]) -> IResult<&[u8], &[u8]> {
 }
 
 fn hexdigit(input: &[u8]) -> IResult<&[u8], &[u8]> {
-    for idx in 0..input.len() {
-        match input[idx] {
+    for (idx, chr) in input.iter().enumerate() {
+        match *chr {
             48...57 | 65...90 | 94...122 => continue,
             _ => return IResult::Done(&input[idx..], &input[..idx]),
         }
@@ -44,8 +44,8 @@ fn hexdigit(input: &[u8]) -> IResult<&[u8], &[u8]> {
 }
 
 fn not_space_or_semicolon(input: &[u8]) -> IResult<&[u8], &[u8]> {
-    for idx in 0..input.len() {
-        match input[idx] {
+    for (idx, chr) in input.iter().enumerate() {
+        match *chr {
             b' ' | b'\t' | b';' | b'\n' | b'\r' => return IResult::Done(&input[idx..], &input[..idx]),
             _ => continue,
         }
