@@ -35,6 +35,10 @@ enum BodyTypeState { Lenth(usize), Chunked(ChunkedState), EOF, NoBody }
 #[derive(PartialEq,Eq,Debug,Clone,Copy)]
 pub enum BodyType { Length(usize), Chunked, EOF, NoBody }
 
+enum BufferState { Ready(ParserState), Incomplete, }
+
+struct ParserReturn<'r> (&'r [u8], BufferState);
+
 
 pub trait HttpCallbacks {
     fn on_request_line(&mut self, parser: &mut HttpParser, request: &RequestLine);
@@ -63,13 +67,12 @@ impl HttpParser {
     pub fn parse_http<T: HttpCallbacks>(&mut self, cb: &mut T, input: &[u8]) -> HttpParserResult {
         let mut curr_input = input;
         loop {
-            let (size, next_state) = match self.current_state {
+            let res = match self.current_state {
                 ParserState::RequestLine => try!(self.parse_request_line(cb, curr_input)),
                 ParserState::Headers => try!(self.parse_header(cb, curr_input)),
                 ParserState::HeaderEnd => try!(self.parse_header_end(cb, curr_input)),
                 ParserState::Body(body_type) => try!(self.parse_body(cb, curr_input, body_type)),
                 ParserState::Done => {
-                    // TODO: Reset things.
                     cb.on_end(self);
                     self.body_type = BodyType::NoBody;
                     self.body_finished = false;
@@ -77,34 +80,41 @@ impl HttpParser {
                     return Ok(input.len() - curr_input.len());
                 }
             };
-            if size > 0 || next_state != self.current_state {
-                self.current_state = next_state;
-                curr_input = &curr_input[size..];
-            } else {
-                return Ok(input.len() - curr_input.len());
+
+            curr_input = res.0;
+
+            match res.1 {
+                BufferState::Ready(next_state) => {
+                    self.current_state = next_state;
+                },
+                BufferState::Incomplete => {
+                    return Ok(input.len() - curr_input.len());
+                }
             }
         }
     }
 
-    fn parse_request_line<T: HttpCallbacks>(&mut self, cb: &mut T, input: &[u8]) -> Result<(usize, ParserState), HttpParserError> {
+    fn parse_request_line<'r, T: HttpCallbacks>(&mut self, cb: &mut T, input: &'r [u8])
+    -> Result<ParserReturn<'r>, HttpParserError> {
         Ok(match parsers::request_line(input) {
             IResult::Error(_) => return Err(HttpParserError::BadFirstLine),
-            IResult::Incomplete(_) => (0, self.current_state),
+            IResult::Incomplete(_) => ParserReturn(input, BufferState::Incomplete),
             IResult::Done(i, request) => {
                 cb.on_request_line(self, &request);
-                (input.len() - i.len(), ParserState::Headers)
+                ParserReturn(i, BufferState::Ready(ParserState::Headers))
             }
         })
     }
 
-    fn parse_header<T: HttpCallbacks>(&mut self, cb: &mut T, input: &[u8]) -> Result<(usize, ParserState), HttpParserError> {
+    fn parse_header<'r, T: HttpCallbacks>(&mut self, cb: &mut T, input: &'r[u8])
+    -> Result<ParserReturn<'r>, HttpParserError> {
         let mut start = 0;
         loop {
             match parsers::header(&input[start..]) {
                 IResult::Error(_) => {
-                    return Ok((start, ParserState::HeaderEnd))
+                    return Ok(ParserReturn(&input[start..], BufferState::Ready(ParserState::HeaderEnd)))
                 },
-                IResult::Incomplete(_) => return Ok((0, self.current_state)),
+                IResult::Incomplete(_) => return Ok(ParserReturn(input, BufferState::Incomplete)),
                 IResult::Done(i, (name, value)) => {
                     cb.on_header(self, name, value);
                     if let Some(body_type) = try!(body_type_from_header(name, value)) {
@@ -117,14 +127,15 @@ impl HttpParser {
         }
     }
 
-    fn parse_header_end<T: HttpCallbacks>(&mut self, cb: &mut T, input: &[u8]) -> Result<(usize, ParserState), HttpParserError> {
+    fn parse_header_end<'r, T: HttpCallbacks>(&mut self, cb: &mut T, input: &'r [u8])
+    -> Result<ParserReturn<'r>, HttpParserError> {
         Ok(match parsers::empty_line(input) {
             IResult::Error(_) => return Err(HttpParserError::BadHeader),
-            IResult::Incomplete(_) => (0, self.current_state),
+            IResult::Incomplete(_) => ParserReturn(input, BufferState::Incomplete),
             IResult::Done(i, _) => {
                 if self.body_finished {
                     // We were dealing with trailing headers, so now we've finished.
-                    (input.len() - i.len(), ParserState::Done)
+                    ParserReturn(i, BufferState::Ready(ParserState::Done))
                 } else {
                     let body_type = self.body_type;
                     cb.on_message_begin(self, body_type);
@@ -136,40 +147,53 @@ impl HttpParser {
                         BodyType::NoBody => BodyTypeState::NoBody,
                     };
 
-                    (input.len() - i.len(), ParserState::Body(body_state))
+                    ParserReturn(i, BufferState::Ready(ParserState::Body(body_state)))
                 }
             }
         })
     }
 
-    fn parse_body<T: HttpCallbacks>(&mut self, cb: &mut T, input: &[u8], body_type: BodyTypeState) -> Result<(usize, ParserState), HttpParserError> {
+    fn parse_body<'r, T: HttpCallbacks>(&mut self, cb: &mut T, input: &'r [u8], body_type: BodyTypeState)
+    -> Result<ParserReturn<'r>, HttpParserError> {
         Ok(match body_type {
             BodyTypeState::Lenth(size) => {
                 if input.len() < size {
                     cb.on_chunk(self, input);
-                    (
-                        input.len(),
-                        ParserState::Body(BodyTypeState::Lenth(size - input.len()))
+                    ParserReturn(
+                        b"",
+                        BufferState::Ready(
+                            ParserState::Body(BodyTypeState::Lenth(size - input.len()))
+                        )
                     )
                 } else {
+                    if input.len() == 0 {
+                        return Ok(ParserReturn(input, BufferState::Incomplete));
+                    }
+
                     cb.on_chunk(self, &input[..size]);
-                    (size, ParserState::Done)
+                    ParserReturn(&input[size..], BufferState::Ready(ParserState::Done))
                 }
             },
             BodyTypeState::Chunked(chunk_state) => {
+                if input.len() == 0 {
+                    return Ok(ParserReturn(input, BufferState::Incomplete));
+                }
+
                 match chunk_state {
                     ChunkedState::Header => {
                         match parsers::chunk_parser(input) {
                             IResult::Error(_) => return Err(HttpParserError::BadBodyChunkHeader),
-                            IResult::Incomplete(_) => (0, self.current_state),
+                            IResult::Incomplete(_) => ParserReturn(input, BufferState::Incomplete),
                             IResult::Done(i, chunk_header) => {
                                 // TODO: Handle chunk_header
-                                (
-                                    input.len() - i.len(),
-                                    ParserState::Body(
-                                        BodyTypeState::Chunked(
-                                            ChunkedState::Data(
-                                                chunk_header.size
+                                ParserReturn(
+                                    i,
+                                    BufferState::Ready(
+                                        ParserState::Body(
+                                            BodyTypeState::Chunked(
+                                                ChunkedState::Data(
+                                                    chunk_header.size
+                                                )
                                             )
                                         )
                                     )
@@ -180,12 +204,14 @@ impl HttpParser {
                     ChunkedState::Data(size) => {
                         if input.len() < size {
                             cb.on_chunk(self, input);
-                            (
-                                input.len(),
-                                ParserState::Body(
-                                    BodyTypeState::Chunked(
-                                        ChunkedState::Data(
-                                            size - input.len()
+                            ParserReturn(
+                                b"",
+                                BufferState::Ready(
+                                    ParserState::Body(
+                                        BodyTypeState::Chunked(
+                                            ChunkedState::Data(
+                                                size - input.len()
+                                            )
                                         )
                                     )
                                 )
@@ -193,17 +219,21 @@ impl HttpParser {
                         } else {
                             if size > 0 {
                                 cb.on_chunk(self, &input[..size]);
-                                (
-                                    size,
-                                    ParserState::Body(
-                                        BodyTypeState::Chunked(ChunkedState::DataEnd)
+                                ParserReturn(
+                                    &input[size..],
+                                    BufferState::Ready(
+                                        ParserState::Body(
+                                            BodyTypeState::Chunked(ChunkedState::DataEnd)
+                                        )
                                     )
                                 )
                             } else {
                                 self.body_finished = true;
-                                (
-                                    size,
-                                    ParserState::Headers
+                                ParserReturn(
+                                    &input[size..],
+                                    BufferState::Ready(
+                                        ParserState::Headers
+                                    )
                                 )
                             }
                         }
@@ -211,12 +241,14 @@ impl HttpParser {
                     ChunkedState::DataEnd => {
                         match parsers::empty_line(input) {
                             IResult::Error(_) => return Err(HttpParserError::BadBodyChunkHeader),
-                            IResult::Incomplete(_) => (0, self.current_state),
+                            IResult::Incomplete(_) => ParserReturn(input, BufferState::Incomplete),
                             IResult::Done(i, _) => {
-                                (
-                                    input.len() - i.len(),
-                                    ParserState::Body(
-                                        BodyTypeState::Chunked(ChunkedState::Header)
+                                ParserReturn(
+                                    i,
+                                    BufferState::Ready(
+                                        ParserState::Body(
+                                            BodyTypeState::Chunked(ChunkedState::Header)
+                                        )
                                     )
                                 )
                             }
@@ -225,10 +257,14 @@ impl HttpParser {
                 }
             },
             BodyTypeState::EOF => {
+                if input.len() == 0 {
+                    return Ok(ParserReturn(input, BufferState::Incomplete));
+                }
+
                 cb.on_chunk(self, input);
-                (input.len(), self.current_state)
+                ParserReturn(b"", BufferState::Incomplete)
             },
-            BodyTypeState::NoBody => (0, ParserState::Done),
+            BodyTypeState::NoBody => ParserReturn(input, BufferState::Ready(ParserState::Done)),
         })
     }
 }

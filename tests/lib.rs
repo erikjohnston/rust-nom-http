@@ -38,7 +38,7 @@ macro_rules! create_test {
                         // chunks: String,
                         // finished: bool,
 
-                        assert_eq!($expected.method, cb.method);
+                        assert_eq!($expected, cb);
                     }
                 }
                 {
