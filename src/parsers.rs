@@ -1,5 +1,5 @@
 
-use nom::{IResult, Needed, Err, space, digit};
+use nom::{IResult, Needed, Err, space, digit, is_digit};
 
 use util::hex_buf_to_int;
 
@@ -53,6 +53,7 @@ fn not_space_or_semicolon(input: &[u8]) -> IResult<&[u8], &[u8]> {
     IResult::Incomplete(Needed::Size(1))
 }
 
+named!(not_vspace, is_not!("\r\n"));
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct RequestLine<'r> {
@@ -60,6 +61,30 @@ pub struct RequestLine<'r> {
     pub path: &'r [u8],
     pub version: (&'r [u8], &'r [u8]),
 }
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct ResponseLine<'r> {
+    pub version: (&'r [u8], &'r [u8]),
+    pub code: u16,
+    pub phrase: &'r [u8],
+}
+
+named!(
+    pub response_line <&[u8], ResponseLine>,
+    chain!(
+        tag!("HTTP/")       ~
+        major: digit        ~
+        tag!(".")           ~
+        minor: digit        ~
+        space?              ~
+        code: response_code ~
+        space?              ~
+        phrase: not_vspace  ~
+        tag!("\r")?         ~
+        tag!("\n")          ,
+        || {ResponseLine{version: (major, minor), code: code, phrase: phrase}}
+    )
+);
 
 named!(
     pub request_line <&[u8], RequestLine>,
@@ -78,6 +103,25 @@ named!(
         || {RequestLine{method: method, path:path, version: (major, minor)}}
     )
 );
+
+fn response_code(input: &[u8]) -> IResult<&[u8], u16> {
+    if input.len() < 3 {
+        return IResult::Incomplete(Needed::Size(3 - input.len()));
+    }
+
+    for idx in 0..3 {
+        if !is_digit(input[idx]) {
+            return IResult::Error(Err::Code(0))
+        }
+    }
+
+    IResult::Done(
+        &input[3..],
+        (input[0] - b'0') as u16 * 100u16
+        + (input[1] - b'0') as u16 * 10u16
+        + (input[2] - b'0') as u16
+    )
+}
 
 // We need this to deal with the insanity of obs-fold
 fn take_header_value(buf: &[u8]) -> IResult<&[u8], &[u8]> {
@@ -304,6 +348,15 @@ test_parser!(
         test_re_l_1 => b"GET /test_url/ HTTP/1.0\r\n",
         test_re_l_2 => b"GET /test_url/ HTTP/1.0\n",
         test_re_l_3 => b"GET  /test_url/ \t HTTP/1.0\t  \n",
+    ]
+);
+
+test_parser!(
+    response_line,
+    ResponseLine{version: (b"1", b"0"), code: 500u16, phrase: b"Internal Server Error"} => [
+        test_res_l_1 => b"HTTP/1.0 500 Internal Server Error\r\n",
+        test_res_l_2 => b"HTTP/1.0 500 Internal Server Error\n",
+        test_res_l_3 => b"HTTP/1.0  500  \t Internal Server Error\r\n",
     ]
 );
 

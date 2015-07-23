@@ -199,7 +199,7 @@ impl TestHttpCallback {
     }
 }
 
-impl HttpCallbacks for TestHttpCallback {
+impl HttpRequestCallbacks for TestHttpCallback {
     fn on_request_line(&mut self, parser: &mut HttpParser, request: &RequestLine) {
         println!("on_request_line");
         self.method = String::from_utf8(request.method.to_owned()).unwrap();
@@ -209,6 +209,10 @@ impl HttpCallbacks for TestHttpCallback {
             util::dec_buf_to_int(request.version.1).unwrap(),
         );
     }
+
+}
+
+impl HttpMessageCallbacks for TestHttpCallback {
     fn on_header(&mut self, parser: &mut HttpParser, name: &[u8], value: &[u8]) {
         println!(
             "on_header name: {:?}, value: {:?}",
