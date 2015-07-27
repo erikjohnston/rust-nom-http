@@ -53,7 +53,15 @@ fn not_space_or_semicolon(input: &[u8]) -> IResult<&[u8], &[u8]> {
     IResult::Incomplete(Needed::Size(1))
 }
 
-named!(not_vspace, is_not!("\r\n"));
+fn not_vspace(input: &[u8]) -> IResult<&[u8], &[u8]> {
+    for (idx, chr) in input.iter().enumerate() {
+        match *chr {
+            b'\n' | b'\r' => return IResult::Done(&input[idx..], &input[..idx]),
+            _ => continue,
+        }
+    }
+    IResult::Incomplete(Needed::Size(1))
+}
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct RequestLine<'r> {
@@ -373,6 +381,14 @@ test_parser!(
     ],
 );
 
+test_parser!(
+    response_code,
+    200 => [
+        test_response_code_1 => b"200",
+        test_response_code_2 => b"200 ",
+    ],
+);
+
 #[test]
 fn test_take_header() {
     assert_eq!(
@@ -429,6 +445,44 @@ fn test_chunk_param_incomplete() {
 
     for i in incomplete.iter() {
         let res = chunk_parser(i);
+        match res {
+            IResult::Incomplete(_) => {},
+            d@ _ => panic!("Not incomplete: {:?}: {:?}", String::from_utf8_lossy(i), d)
+        }
+    }
+}
+
+#[test]
+fn test_response_code_incomplete() {
+    let incomplete = [
+        &b"2"[..],
+        &b"20"[..],
+    ];
+
+    for i in incomplete.iter() {
+        let res = response_code(i);
+        match res {
+            IResult::Incomplete(_) => {},
+            d@ _ => panic!("Not incomplete: {:?}: {:?}", String::from_utf8_lossy(i), d)
+        }
+    }
+}
+
+#[test]
+fn test_response_line_incomplete() {
+    let incomplete = [
+        &b"HTTP/1.0 500 Internal Server Error\r"[..],
+        &b"HTTP/1.0 500 Internal Server Error"[..],
+        &b"HTTP/1.0 500 Internal"[..],
+        &b"HTTP/1.0 500 "[..],
+        &b"HTTP/1.0 500"[..],
+        &b"HTTP/1.0 50"[..],
+        &b"HTTP/1.0 "[..],
+        &b"HTTP/1."[..],
+    ];
+
+    for i in incomplete.iter() {
+        let res = response_line(i);
         match res {
             IResult::Incomplete(_) => {},
             d@ _ => panic!("Not incomplete: {:?}: {:?}", String::from_utf8_lossy(i), d)
