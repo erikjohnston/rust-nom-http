@@ -15,7 +15,7 @@ Stuff left to do:
     - [x] Consume and expose trailing headers
     - [x] Consume chunk params
     - [ ] Expose chunk params in API
-- [ ] Responses
+- [x] Responses
 - [ ] Fixup API
   - [x] Proper error handling
   - [x] Allow parser to be reused
