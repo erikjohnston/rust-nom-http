@@ -63,16 +63,19 @@ pub struct HttpParser {
     pub body_type: BodyType,
     current_state: ParserState,
     body_finished: bool,
-    parser_type: ParserType,
+    // parser_type: ParserType,
 }
 
 impl HttpParser {
     pub fn new(parser_type: ParserType) -> HttpParser {
         HttpParser {
             current_state: ParserState::FirstLine,
-            body_type: BodyType::NoBody,
+            body_type: match parser_type {
+                ParserType::Request => BodyType::NoBody,
+                ParserType::Response => BodyType::EOF,
+            },
             body_finished: false,
-            parser_type: parser_type,
+            // parser_type: parser_type,
         }
     }
 
@@ -81,6 +84,26 @@ impl HttpParser {
         let mut curr_input = input;
         if let ParserState::FirstLine = self.current_state {
             let res = try!(self.parse_request_line(cb, curr_input));
+            curr_input = res.0;
+
+            match res.1 {
+                BufferState::Ready(next_state) => {
+                    self.current_state = next_state;
+                },
+                BufferState::Incomplete => {
+                    return Ok(input.len() - curr_input.len());
+                }
+            }
+        }
+
+        self.parse_http(cb, curr_input).map(|res| res + input.len() - curr_input.len())
+    }
+
+    pub fn parse_response<T: HttpResponseCallbacks>(&mut self, cb: &mut T, input: &[u8])
+    -> HttpParserResult<usize> {
+        let mut curr_input = input;
+        if let ParserState::FirstLine = self.current_state {
+            let res = try!(self.parse_response_line(cb, curr_input));
             curr_input = res.0;
 
             match res.1 {

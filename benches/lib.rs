@@ -1,11 +1,11 @@
 #![feature(test)]
+#![allow(unused_variables)]
 
 extern crate nom_http;
 extern crate test;
 
 use nom_http::*;
 use std::collections::HashMap;
-use std::str;
 
 
 const TEST_REQUEST_CHUNKED : &'static [u8] =

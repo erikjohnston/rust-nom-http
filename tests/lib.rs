@@ -201,7 +201,7 @@ impl TestHttpCallback {
 }
 
 impl HttpRequestCallbacks for TestHttpCallback {
-    fn on_request_line(&mut self, parser: &mut HttpParser, request: &RequestLine) {
+    fn on_request_line(&mut self, _: &mut HttpParser, request: &RequestLine) {
         println!("on_request_line");
         self.method = String::from_utf8(request.method.to_owned()).unwrap();
         self.path = String::from_utf8(request.path.to_owned()).unwrap();
@@ -214,7 +214,7 @@ impl HttpRequestCallbacks for TestHttpCallback {
 }
 
 impl HttpMessageCallbacks for TestHttpCallback {
-    fn on_header(&mut self, parser: &mut HttpParser, name: &[u8], value: &[u8]) {
+    fn on_header(&mut self, _: &mut HttpParser, name: &[u8], value: &[u8]) {
         println!(
             "on_header name: {:?}, value: {:?}",
             String::from_utf8_lossy(name),
@@ -222,16 +222,16 @@ impl HttpMessageCallbacks for TestHttpCallback {
         );
         self.headers.insert(String::from_utf8(name.to_owned()).unwrap(), String::from_utf8(value.to_owned()).unwrap());
     }
-    fn on_message_begin(&mut self, parser: &mut HttpParser, body_type: BodyType) {
+    fn on_message_begin(&mut self, _: &mut HttpParser, body_type: BodyType) {
         println!("on_message_begin");
         println!("BodyType: {:?}", body_type);
     }
-    fn on_chunk(&mut self, parser: &mut HttpParser, data: &[u8]) {
+    fn on_chunk(&mut self, _: &mut HttpParser, data: &[u8]) {
         println!("on_chunk");
 
         self.chunks.push_str(str::from_utf8(data).unwrap());
     }
-    fn on_end(&mut self, parser: &mut HttpParser) {
+    fn on_end(&mut self, _: &mut HttpParser) {
         println!("on_end");
         self.finished = true;
     }
