@@ -136,7 +136,9 @@ impl HttpMessageCallbacks for TestHttpCallback {
         // self.headers.insert(String::from_utf8(name.to_owned()).unwrap(), String::from_utf8(value.to_owned()).unwrap());
     }
 
-    fn on_message_begin(&mut self, parser: &mut HttpParser, body_type: BodyType) {}
+    fn on_headers_finished(&mut self, parser: &mut HttpParser, body_type: BodyType) -> ExpectBody {
+        ExpectBody::Maybe
+    }
 
     fn on_chunk(&mut self, parser: &mut HttpParser, data: &[u8]) {
         // self.chunks.push_str(str::from_utf8(data).unwrap());

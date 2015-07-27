@@ -74,7 +74,7 @@ macro_rules! create_response_test {
                 {
                     let mut http_parser = HttpParser::new(ParserType::Response);
                     for _ in 0..3 {  // Tests to ensure we can run the parser multiple times
-                        let mut cb = TestResponseHttpCallback::new();
+                        let mut cb = TestResponseHttpCallback::new($expected.expect_body);
                         http_parser.parse_response(
                             &mut cb,
                             input
@@ -87,7 +87,7 @@ macro_rules! create_response_test {
                     let mut http_parser = HttpParser::new(ParserType::Response);
 
                     for _ in 0..3 {  // Tests to ensure we can run the parser multiple times
-                        let mut cb = TestResponseHttpCallback::new();
+                        let mut cb = TestResponseHttpCallback::new($expected.expect_body);
                         let mut start = 0;
                         for i in 1..input.len() + 1 {
                             println!("Input: {:?}", String::from_utf8_lossy(&input[start..i]));
@@ -202,6 +202,7 @@ create_response_test!{
         },
         chunks: "Hello".to_owned(),
         finished: true,
+        expect_body: ExpectBody::Maybe,
     } => {
         resp_chunked_trailing =>
 b"HTTP/1.0 200 OK
@@ -213,7 +214,27 @@ Hello
 TestName: TestValue
 
 ",
+    },
+    TestResponseHttpCallback{
+        version: (1, 0),
+        code: 200,
+        phrase: "OK".to_owned(),
+        headers: create_map!{
+            "Content-Length" => "52",
+            "TestName" => "TestValue"
+        },
+        chunks: "".to_owned(),
+        finished: true,
+        expect_body: ExpectBody::No,
+    } => {
+        resp_head =>
+b"HTTP/1.0 200 OK
+Content-Length: 52
+TestName: TestValue
+
+",
     }
+
 }
 
 
@@ -288,9 +309,10 @@ impl HttpMessageCallbacks for TestRequestHttpCallback {
         );
         self.headers.insert(String::from_utf8(name.to_owned()).unwrap(), String::from_utf8(value.to_owned()).unwrap());
     }
-    fn on_message_begin(&mut self, _: &mut HttpParser, body_type: BodyType) {
-        println!("on_message_begin");
+    fn on_headers_finished(&mut self, _: &mut HttpParser, body_type: BodyType) -> ExpectBody {
+        println!("on_headers_finished");
         println!("BodyType: {:?}", body_type);
+        ExpectBody::Maybe
     }
     fn on_chunk(&mut self, _: &mut HttpParser, data: &[u8]) {
         println!("on_chunk");
@@ -311,10 +333,11 @@ struct TestResponseHttpCallback {
     headers: HashMap<String, String>,
     chunks: String,
     finished: bool,
+    expect_body: ExpectBody,
 }
 
 impl TestResponseHttpCallback {
-    fn new() -> TestResponseHttpCallback {
+    fn new(expect_body: ExpectBody) -> TestResponseHttpCallback {
         TestResponseHttpCallback{
             version: (0,0),
             code: 0,
@@ -322,6 +345,7 @@ impl TestResponseHttpCallback {
             headers: HashMap::new(),
             chunks: String::new(),
             finished: false,
+            expect_body: expect_body,
         }
     }
 }
@@ -348,9 +372,10 @@ impl HttpMessageCallbacks for TestResponseHttpCallback {
         );
         self.headers.insert(String::from_utf8(name.to_owned()).unwrap(), String::from_utf8(value.to_owned()).unwrap());
     }
-    fn on_message_begin(&mut self, _: &mut HttpParser, body_type: BodyType) {
-        println!("on_message_begin");
+    fn on_headers_finished(&mut self, _: &mut HttpParser, body_type: BodyType) -> ExpectBody {
+        println!("on_headers_finished");
         println!("BodyType: {:?}", body_type);
+        self.expect_body
     }
     fn on_chunk(&mut self, _: &mut HttpParser, data: &[u8]) {
         println!("on_chunk");

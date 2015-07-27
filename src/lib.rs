@@ -39,10 +39,13 @@ enum BufferState { Ready(ParserState), Incomplete, }
 
 struct ParserReturn<'r> (&'r [u8], BufferState);
 
+#[derive(PartialEq,Eq,Debug,Clone,Copy)]
+pub enum ExpectBody { Maybe, No }
+
 
 pub trait HttpMessageCallbacks {
     fn on_header(&mut self, parser: &mut HttpParser, name: &[u8], value: &[u8]);
-    fn on_message_begin(&mut self, parser: &mut HttpParser, body_type: BodyType);
+    fn on_headers_finished(&mut self, parser: &mut HttpParser, body_type: BodyType) -> ExpectBody;
     fn on_chunk(&mut self, parser: &mut HttpParser, data: &[u8]);
     fn on_end(&mut self, parser: &mut HttpParser);
 }
@@ -63,6 +66,7 @@ pub struct HttpParser {
     pub body_type: BodyType,
     current_state: ParserState,
     body_finished: bool,
+    expect_body: ExpectBody,
     // parser_type: ParserType,
 }
 
@@ -76,6 +80,7 @@ impl HttpParser {
             },
             body_finished: false,
             // parser_type: parser_type,
+            expect_body: ExpectBody::Maybe,
         }
     }
 
@@ -206,13 +211,16 @@ impl HttpParser {
                     ParserReturn(i, BufferState::Ready(ParserState::Done))
                 } else {
                     let body_type = self.body_type;
-                    cb.on_message_begin(self, body_type);
+                    self.expect_body = cb.on_headers_finished(self, body_type);
 
-                    let body_state = match self.body_type {
-                        BodyType::Chunked => BodyTypeState::Chunked(ChunkedState::Header),
-                        BodyType::Length(len) => BodyTypeState::Lenth(len),
-                        BodyType::EOF => BodyTypeState::EOF,
-                        BodyType::NoBody => BodyTypeState::NoBody,
+                    let body_state = match self.expect_body {
+                        ExpectBody::Maybe => match self.body_type {
+                            BodyType::Chunked => BodyTypeState::Chunked(ChunkedState::Header),
+                            BodyType::Length(len) => BodyTypeState::Lenth(len),
+                            BodyType::EOF => BodyTypeState::EOF,
+                            BodyType::NoBody => BodyTypeState::NoBody,
+                        },
+                        ExpectBody::No => BodyTypeState::NoBody,
                     };
 
                     ParserReturn(i, BufferState::Ready(ParserState::Body(body_state)))
@@ -225,7 +233,9 @@ impl HttpParser {
     -> HttpParserResult<ParserReturn<'r>> {
         Ok(match body_type {
             BodyTypeState::Lenth(size) => {
-                if input.len() < size {
+                if input.len() == 0 && size != 0 {
+                    return Ok(ParserReturn(input, BufferState::Incomplete));
+                } else if input.len() < size {
                     cb.on_chunk(self, input);
                     ParserReturn(
                         b"",
@@ -234,10 +244,6 @@ impl HttpParser {
                         )
                     )
                 } else {
-                    if input.len() == 0 {
-                        return Ok(ParserReturn(input, BufferState::Incomplete));
-                    }
-
                     cb.on_chunk(self, &input[..size]);
                     ParserReturn(&input[size..], BufferState::Ready(ParserState::Done))
                 }
