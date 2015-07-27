@@ -1,5 +1,5 @@
 
-use nom::{IResult, Needed, Err, space, digit};
+use nom::{IResult, Needed, Err, space, digit, is_digit};
 
 use util::hex_buf_to_int;
 
@@ -53,6 +53,15 @@ fn not_space_or_semicolon(input: &[u8]) -> IResult<&[u8], &[u8]> {
     IResult::Incomplete(Needed::Size(1))
 }
 
+fn not_vspace(input: &[u8]) -> IResult<&[u8], &[u8]> {
+    for (idx, chr) in input.iter().enumerate() {
+        match *chr {
+            b'\n' | b'\r' => return IResult::Done(&input[idx..], &input[..idx]),
+            _ => continue,
+        }
+    }
+    IResult::Incomplete(Needed::Size(1))
+}
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct RequestLine<'r> {
@@ -60,6 +69,30 @@ pub struct RequestLine<'r> {
     pub path: &'r [u8],
     pub version: (&'r [u8], &'r [u8]),
 }
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct ResponseLine<'r> {
+    pub version: (&'r [u8], &'r [u8]),
+    pub code: u16,
+    pub phrase: &'r [u8],
+}
+
+named!(
+    pub response_line <&[u8], ResponseLine>,
+    chain!(
+        tag!("HTTP/")       ~
+        major: digit        ~
+        tag!(".")           ~
+        minor: digit        ~
+        space?              ~
+        code: response_code ~
+        space?              ~
+        phrase: not_vspace  ~
+        tag!("\r")?         ~
+        tag!("\n")          ,
+        || {ResponseLine{version: (major, minor), code: code, phrase: phrase}}
+    )
+);
 
 named!(
     pub request_line <&[u8], RequestLine>,
@@ -78,6 +111,25 @@ named!(
         || {RequestLine{method: method, path:path, version: (major, minor)}}
     )
 );
+
+fn response_code(input: &[u8]) -> IResult<&[u8], u16> {
+    if input.len() < 3 {
+        return IResult::Incomplete(Needed::Size(3 - input.len()));
+    }
+
+    for idx in 0..3 {
+        if !is_digit(input[idx]) {
+            return IResult::Error(Err::Code(0))
+        }
+    }
+
+    IResult::Done(
+        &input[3..],
+        (input[0] - b'0') as u16 * 100u16
+        + (input[1] - b'0') as u16 * 10u16
+        + (input[2] - b'0') as u16
+    )
+}
 
 // We need this to deal with the insanity of obs-fold
 fn take_header_value(buf: &[u8]) -> IResult<&[u8], &[u8]> {
@@ -308,6 +360,15 @@ test_parser!(
 );
 
 test_parser!(
+    response_line,
+    ResponseLine{version: (b"1", b"0"), code: 500u16, phrase: b"Internal Server Error"} => [
+        test_res_l_1 => b"HTTP/1.0 500 Internal Server Error\r\n",
+        test_res_l_2 => b"HTTP/1.0 500 Internal Server Error\n",
+        test_res_l_3 => b"HTTP/1.0  500  \t Internal Server Error\r\n",
+    ]
+);
+
+test_parser!(
     header,
     (&b"Content-Length"[..], &b"52"[..]) => [
         test_header_1 => b"Content-Length: 52\r\nfoo...",
@@ -317,6 +378,14 @@ test_parser!(
     ],
     (&b"Content-Length"[..], &b"test\r\n and\r\n another"[..]) => [
         test_header_obs => b"Content-Length: test\r\n and\r\n another\r\n\r\n",
+    ],
+);
+
+test_parser!(
+    response_code,
+    200 => [
+        test_response_code_1 => b"200",
+        test_response_code_2 => b"200 ",
     ],
 );
 
@@ -347,6 +416,26 @@ fn test_request_line_incomplete() {
 }
 
 #[test]
+fn test_header_incomplete() {
+    let incomplete = [
+        &b"C"[..],
+        &b"Co"[..],
+        &b"Content-Length:"[..],
+        &b"Content-Length: 52"[..],
+        &b"Content-Length: 52\n"[..],
+    ];
+
+    for i in incomplete.iter() {
+        let res = header(i);
+        match res {
+            IResult::Incomplete(_) => {},
+            d@ _ => panic!("Not incomplete: {:?}: {:?}", String::from_utf8_lossy(i), d)
+        }
+    }
+}
+
+
+#[test]
 fn test_chunk_param_incomplete() {
     let incomplete = [
         &b"5;"[..],
@@ -356,6 +445,44 @@ fn test_chunk_param_incomplete() {
 
     for i in incomplete.iter() {
         let res = chunk_parser(i);
+        match res {
+            IResult::Incomplete(_) => {},
+            d@ _ => panic!("Not incomplete: {:?}: {:?}", String::from_utf8_lossy(i), d)
+        }
+    }
+}
+
+#[test]
+fn test_response_code_incomplete() {
+    let incomplete = [
+        &b"2"[..],
+        &b"20"[..],
+    ];
+
+    for i in incomplete.iter() {
+        let res = response_code(i);
+        match res {
+            IResult::Incomplete(_) => {},
+            d@ _ => panic!("Not incomplete: {:?}: {:?}", String::from_utf8_lossy(i), d)
+        }
+    }
+}
+
+#[test]
+fn test_response_line_incomplete() {
+    let incomplete = [
+        &b"HTTP/1.0 500 Internal Server Error\r"[..],
+        &b"HTTP/1.0 500 Internal Server Error"[..],
+        &b"HTTP/1.0 500 Internal"[..],
+        &b"HTTP/1.0 500 "[..],
+        &b"HTTP/1.0 500"[..],
+        &b"HTTP/1.0 50"[..],
+        &b"HTTP/1.0 "[..],
+        &b"HTTP/1."[..],
+    ];
+
+    for i in incomplete.iter() {
+        let res = response_line(i);
         match res {
             IResult::Incomplete(_) => {},
             d@ _ => panic!("Not incomplete: {:?}: {:?}", String::from_utf8_lossy(i), d)

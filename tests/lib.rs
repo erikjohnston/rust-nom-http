@@ -14,7 +14,7 @@ macro_rules! create_map {
 }
 
 
-macro_rules! create_test {
+macro_rules! create_request_test {
     ($( $expected:expr => {$($i:ident => $input_expr:expr),+$(,)*} ),+ $(,)* ) => {
         $($(
             #[test]
@@ -23,10 +23,10 @@ macro_rules! create_test {
                 // to concat identifiers
                 let input = $input_expr;
                 {
-                    let mut http_parser = HttpParser::new();
+                    let mut http_parser = HttpParser::new(ParserType::Request);
                     for _ in 0..3 {  // Tests to ensure we can run the parser multiple times
-                        let mut cb = TestHttpCallback::new();
-                        http_parser.parse_http(
+                        let mut cb = TestRequestHttpCallback::new();
+                        http_parser.parse_request(
                             &mut cb,
                             input
                         ).unwrap();
@@ -41,15 +41,16 @@ macro_rules! create_test {
                         assert_eq!($expected, cb);
                     }
                 }
+                println!("Passed full buffer tests.");
                 {
-                    let mut http_parser = HttpParser::new();
+                    let mut http_parser = HttpParser::new(ParserType::Request);
 
                     for _ in 0..3 {  // Tests to ensure we can run the parser multiple times
-                        let mut cb = TestHttpCallback::new();
+                        let mut cb = TestRequestHttpCallback::new();
                         let mut start = 0;
                         for i in 1..input.len() + 1 {
                             println!("Input: {:?}", String::from_utf8_lossy(&input[start..i]));
-                            start += http_parser.parse_http(
+                            start += http_parser.parse_request(
                                 &mut cb,
                                 &input[start..i],
                             ).unwrap();
@@ -62,8 +63,49 @@ macro_rules! create_test {
     }
 }
 
-create_test!{
-    TestHttpCallback{
+macro_rules! create_response_test {
+    ($( $expected:expr => {$($i:ident => $input_expr:expr),+$(,)*} ),+ $(,)* ) => {
+        $($(
+            #[test]
+            fn $i() {
+                // TODO: These should be split into multiple tests, but there's no nice way
+                // to concat identifiers
+                let input = $input_expr;
+                {
+                    let mut http_parser = HttpParser::new(ParserType::Response);
+                    for _ in 0..3 {  // Tests to ensure we can run the parser multiple times
+                        let mut cb = TestResponseHttpCallback::new($expected.expect_body);
+                        http_parser.parse_response(
+                            &mut cb,
+                            input
+                        ).unwrap();
+                        assert_eq!($expected, cb);
+                    }
+                }
+                println!("Passed full buffer tests.");
+                {
+                    let mut http_parser = HttpParser::new(ParserType::Response);
+
+                    for _ in 0..3 {  // Tests to ensure we can run the parser multiple times
+                        let mut cb = TestResponseHttpCallback::new($expected.expect_body);
+                        let mut start = 0;
+                        for i in 1..input.len() + 1 {
+                            println!("Input: {:?}", String::from_utf8_lossy(&input[start..i]));
+                            start += http_parser.parse_response(
+                                &mut cb,
+                                &input[start..i],
+                            ).unwrap();
+                        }
+                        assert_eq!($expected, cb);
+                    }
+                }
+            }
+        )*)*
+    }
+}
+
+create_request_test!{
+    TestRequestHttpCallback{
         method: "GET".to_owned(),
         path: "/test_url/".to_owned(),
         version: (1, 0),
@@ -117,7 +159,7 @@ Hello
 
 "#,
     },
-    TestHttpCallback{
+    TestRequestHttpCallback{
         method: "GET".to_owned(),
         path: "/joyent/http-parser/".to_owned(),
         version: (1, 1),
@@ -149,12 +191,58 @@ Accept-Language: en-GB,en-US;q=0.8,en;q=0.6,nb;q=0.4
     }
 }
 
+create_response_test!{
+    TestResponseHttpCallback{
+        version: (1, 0),
+        code: 200,
+        phrase: "OK".to_owned(),
+        headers: create_map!{
+            "Transfer-Encoding" => "chunked",
+            "TestName" => "TestValue"
+        },
+        chunks: "Hello".to_owned(),
+        finished: true,
+        expect_body: ExpectBody::Maybe,
+    } => {
+        resp_chunked_trailing =>
+b"HTTP/1.0 200 OK
+Transfer-Encoding: chunked
+
+5
+Hello
+0
+TestName: TestValue
+
+",
+    },
+    TestResponseHttpCallback{
+        version: (1, 0),
+        code: 200,
+        phrase: "OK".to_owned(),
+        headers: create_map!{
+            "Content-Length" => "52",
+            "TestName" => "TestValue"
+        },
+        chunks: "".to_owned(),
+        finished: true,
+        expect_body: ExpectBody::No,
+    } => {
+        resp_head =>
+b"HTTP/1.0 200 OK
+Content-Length: 52
+TestName: TestValue
+
+",
+    }
+
+}
+
 
 #[test]
 fn test_consumer() {
-    let mut cb = TestHttpCallback::new();
-    let mut http_parser = HttpParser::new();
-    http_parser.parse_http(
+    let mut cb = TestRequestHttpCallback::new();
+    let mut http_parser = HttpParser::new(ParserType::Request);
+    http_parser.parse_request(
         &mut cb, b"GET /test_url/ HTTP/1.0\r\nContent-Length: 5\r\n\r\nHello"
     ).unwrap();
 
@@ -177,7 +265,7 @@ fn test_consumer() {
 // END TESTS
 
 #[derive(PartialEq,Eq,Debug)]
-struct TestHttpCallback {
+struct TestRequestHttpCallback {
     method: String,
     path: String,
     version: (usize, usize),
@@ -186,9 +274,9 @@ struct TestHttpCallback {
     finished: bool,
 }
 
-impl TestHttpCallback {
-    fn new() -> TestHttpCallback {
-        TestHttpCallback{
+impl TestRequestHttpCallback {
+    fn new() -> TestRequestHttpCallback {
+        TestRequestHttpCallback{
             method: String::new(),
             path: String::new(),
             version: (0,0),
@@ -199,8 +287,8 @@ impl TestHttpCallback {
     }
 }
 
-impl HttpCallbacks for TestHttpCallback {
-    fn on_request_line(&mut self, parser: &mut HttpParser, request: &RequestLine) {
+impl HttpRequestCallbacks for TestRequestHttpCallback {
+    fn on_request_line(&mut self, _: &mut HttpParser, request: &RequestLine) {
         println!("on_request_line");
         self.method = String::from_utf8(request.method.to_owned()).unwrap();
         self.path = String::from_utf8(request.path.to_owned()).unwrap();
@@ -209,7 +297,11 @@ impl HttpCallbacks for TestHttpCallback {
             util::dec_buf_to_int(request.version.1).unwrap(),
         );
     }
-    fn on_header(&mut self, parser: &mut HttpParser, name: &[u8], value: &[u8]) {
+
+}
+
+impl HttpMessageCallbacks for TestRequestHttpCallback {
+    fn on_header(&mut self, _: &mut HttpParser, name: &[u8], value: &[u8]) {
         println!(
             "on_header name: {:?}, value: {:?}",
             String::from_utf8_lossy(name),
@@ -217,16 +309,80 @@ impl HttpCallbacks for TestHttpCallback {
         );
         self.headers.insert(String::from_utf8(name.to_owned()).unwrap(), String::from_utf8(value.to_owned()).unwrap());
     }
-    fn on_message_begin(&mut self, parser: &mut HttpParser, body_type: BodyType) {
-        println!("on_message_begin");
+    fn on_headers_finished(&mut self, _: &mut HttpParser, body_type: BodyType) -> ExpectBody {
+        println!("on_headers_finished");
         println!("BodyType: {:?}", body_type);
+        ExpectBody::Maybe
     }
-    fn on_chunk(&mut self, parser: &mut HttpParser, data: &[u8]) {
+    fn on_chunk(&mut self, _: &mut HttpParser, data: &[u8]) {
         println!("on_chunk");
 
         self.chunks.push_str(str::from_utf8(data).unwrap());
     }
-    fn on_end(&mut self, parser: &mut HttpParser) {
+    fn on_end(&mut self, _: &mut HttpParser) {
+        println!("on_end");
+        self.finished = true;
+    }
+}
+
+#[derive(PartialEq,Eq,Debug)]
+struct TestResponseHttpCallback {
+    version: (usize, usize),
+    code: u16,
+    phrase: String,
+    headers: HashMap<String, String>,
+    chunks: String,
+    finished: bool,
+    expect_body: ExpectBody,
+}
+
+impl TestResponseHttpCallback {
+    fn new(expect_body: ExpectBody) -> TestResponseHttpCallback {
+        TestResponseHttpCallback{
+            version: (0,0),
+            code: 0,
+            phrase: String::new(),
+            headers: HashMap::new(),
+            chunks: String::new(),
+            finished: false,
+            expect_body: expect_body,
+        }
+    }
+}
+
+impl HttpResponseCallbacks for TestResponseHttpCallback {
+    fn on_response_line(&mut self, _: &mut HttpParser, response: &ResponseLine) {
+        println!("on_response_line");
+        self.version = (
+            util::dec_buf_to_int(response.version.0).unwrap(),
+            util::dec_buf_to_int(response.version.1).unwrap(),
+        );
+        self.code = response.code;
+        self.phrase = String::from_utf8(response.phrase.to_owned()).unwrap();
+    }
+
+}
+
+impl HttpMessageCallbacks for TestResponseHttpCallback {
+    fn on_header(&mut self, _: &mut HttpParser, name: &[u8], value: &[u8]) {
+        println!(
+            "on_header name: {:?}, value: {:?}",
+            String::from_utf8_lossy(name),
+            String::from_utf8_lossy(value),
+        );
+        self.headers.insert(String::from_utf8(name.to_owned()).unwrap(), String::from_utf8(value.to_owned()).unwrap());
+    }
+    fn on_headers_finished(&mut self, _: &mut HttpParser, body_type: BodyType) -> ExpectBody {
+        println!("on_headers_finished");
+        println!("BodyType: {:?}", body_type);
+        self.expect_body
+    }
+    fn on_chunk(&mut self, _: &mut HttpParser, data: &[u8]) {
+        println!("on_chunk");
+
+        self.chunks.push_str(str::from_utf8(data).unwrap());
+    }
+    fn on_end(&mut self, _: &mut HttpParser) {
         println!("on_end");
         self.finished = true;
     }

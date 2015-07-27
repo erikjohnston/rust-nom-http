@@ -11,15 +11,15 @@ use errors::*;
 
 
 mod parsers;
-pub use parsers::RequestLine;
+pub use parsers::{RequestLine, ResponseLine};
 use nom::{IResult};
 
-pub type HttpParserResult = Result<usize, HttpParserError>;
+pub type HttpParserResult<T> = Result<T, HttpParserError>;
 
 
 #[derive(PartialEq,Eq,Debug,Clone,Copy)]
 enum ParserState {
-    RequestLine,
+    FirstLine,
     Headers,
     HeaderEnd,
     Body(BodyTypeState),
@@ -39,36 +39,97 @@ enum BufferState { Ready(ParserState), Incomplete, }
 
 struct ParserReturn<'r> (&'r [u8], BufferState);
 
+#[derive(PartialEq,Eq,Debug,Clone,Copy)]
+pub enum ExpectBody { Maybe, No }
 
-pub trait HttpCallbacks {
-    fn on_request_line(&mut self, parser: &mut HttpParser, request: &RequestLine);
+
+pub trait HttpMessageCallbacks {
     fn on_header(&mut self, parser: &mut HttpParser, name: &[u8], value: &[u8]);
-    fn on_message_begin(&mut self, parser: &mut HttpParser, body_type: BodyType);
+    fn on_headers_finished(&mut self, parser: &mut HttpParser, body_type: BodyType) -> ExpectBody;
     fn on_chunk(&mut self, parser: &mut HttpParser, data: &[u8]);
     fn on_end(&mut self, parser: &mut HttpParser);
 }
+
+pub trait HttpRequestCallbacks : HttpMessageCallbacks {
+    fn on_request_line(&mut self, parser: &mut HttpParser, request: &RequestLine);
+}
+
+pub trait HttpResponseCallbacks: HttpMessageCallbacks {
+    fn on_response_line(&mut self, parser: &mut HttpParser, response: &ResponseLine);
+}
+
+
+pub enum ParserType { Request, Response, }
 
 
 pub struct HttpParser {
     pub body_type: BodyType,
     current_state: ParserState,
-    body_finished: bool
+    body_finished: bool,
+    expect_body: ExpectBody,
+    // parser_type: ParserType,
 }
 
 impl HttpParser {
-    pub fn new() -> HttpParser {
-        HttpParser{
-            current_state: ParserState::RequestLine,
-            body_type: BodyType::NoBody,
-            body_finished: false
+    pub fn new(parser_type: ParserType) -> HttpParser {
+        HttpParser {
+            current_state: ParserState::FirstLine,
+            body_type: match parser_type {
+                ParserType::Request => BodyType::NoBody,
+                ParserType::Response => BodyType::EOF,
+            },
+            body_finished: false,
+            // parser_type: parser_type,
+            expect_body: ExpectBody::Maybe,
         }
     }
 
-    pub fn parse_http<T: HttpCallbacks>(&mut self, cb: &mut T, input: &[u8]) -> HttpParserResult {
+    pub fn parse_request<T: HttpRequestCallbacks>(&mut self, cb: &mut T, input: &[u8])
+    -> HttpParserResult<usize> {
+        let mut curr_input = input;
+        if let ParserState::FirstLine = self.current_state {
+            let res = try!(self.parse_request_line(cb, curr_input));
+            curr_input = res.0;
+
+            match res.1 {
+                BufferState::Ready(next_state) => {
+                    self.current_state = next_state;
+                },
+                BufferState::Incomplete => {
+                    return Ok(input.len() - curr_input.len());
+                }
+            }
+        }
+
+        self.parse_http(cb, curr_input).map(|res| res + input.len() - curr_input.len())
+    }
+
+    pub fn parse_response<T: HttpResponseCallbacks>(&mut self, cb: &mut T, input: &[u8])
+    -> HttpParserResult<usize> {
+        let mut curr_input = input;
+        if let ParserState::FirstLine = self.current_state {
+            let res = try!(self.parse_response_line(cb, curr_input));
+            curr_input = res.0;
+
+            match res.1 {
+                BufferState::Ready(next_state) => {
+                    self.current_state = next_state;
+                },
+                BufferState::Incomplete => {
+                    return Ok(input.len() - curr_input.len());
+                }
+            }
+        }
+
+        self.parse_http(cb, curr_input).map(|res| res + input.len() - curr_input.len())
+    }
+
+    fn parse_http<T: HttpMessageCallbacks>(&mut self, cb: &mut T, input: &[u8])
+    -> HttpParserResult<usize> {
         let mut curr_input = input;
         loop {
             let res = match self.current_state {
-                ParserState::RequestLine => try!(self.parse_request_line(cb, curr_input)),
+                ParserState::FirstLine => unreachable!(),
                 ParserState::Headers => try!(self.parse_header(cb, curr_input)),
                 ParserState::HeaderEnd => try!(self.parse_header_end(cb, curr_input)),
                 ParserState::Body(body_type) => try!(self.parse_body(cb, curr_input, body_type)),
@@ -76,7 +137,7 @@ impl HttpParser {
                     cb.on_end(self);
                     self.body_type = BodyType::NoBody;
                     self.body_finished = false;
-                    self.current_state = ParserState::RequestLine;
+                    self.current_state = ParserState::FirstLine;
                     return Ok(input.len() - curr_input.len());
                 }
             };
@@ -94,8 +155,8 @@ impl HttpParser {
         }
     }
 
-    fn parse_request_line<'r, T: HttpCallbacks>(&mut self, cb: &mut T, input: &'r [u8])
-    -> Result<ParserReturn<'r>, HttpParserError> {
+    fn parse_request_line<'r, T: HttpRequestCallbacks>(&mut self, cb: &mut T, input: &'r [u8])
+    -> HttpParserResult<ParserReturn<'r>> {
         Ok(match parsers::request_line(input) {
             IResult::Error(_) => return Err(HttpParserError::BadFirstLine),
             IResult::Incomplete(_) => ParserReturn(input, BufferState::Incomplete),
@@ -106,8 +167,20 @@ impl HttpParser {
         })
     }
 
-    fn parse_header<'r, T: HttpCallbacks>(&mut self, cb: &mut T, input: &'r[u8])
-    -> Result<ParserReturn<'r>, HttpParserError> {
+    fn parse_response_line<'r, T: HttpResponseCallbacks>(&mut self, cb: &mut T, input: &'r [u8])
+    -> HttpParserResult<ParserReturn<'r>> {
+        Ok(match parsers::response_line(input) {
+            IResult::Error(_) => return Err(HttpParserError::BadFirstLine),
+            IResult::Incomplete(_) => ParserReturn(input, BufferState::Incomplete),
+            IResult::Done(i, response) => {
+                cb.on_response_line(self, &response);
+                ParserReturn(i, BufferState::Ready(ParserState::Headers))
+            }
+        })
+    }
+
+    fn parse_header<'r, T: HttpMessageCallbacks>(&mut self, cb: &mut T, input: &'r[u8])
+    -> HttpParserResult<ParserReturn<'r>> {
         let mut start = 0;
         loop {
             match parsers::header(&input[start..]) {
@@ -127,8 +200,8 @@ impl HttpParser {
         }
     }
 
-    fn parse_header_end<'r, T: HttpCallbacks>(&mut self, cb: &mut T, input: &'r [u8])
-    -> Result<ParserReturn<'r>, HttpParserError> {
+    fn parse_header_end<'r, T: HttpMessageCallbacks>(&mut self, cb: &mut T, input: &'r [u8])
+    -> HttpParserResult<ParserReturn<'r>> {
         Ok(match parsers::empty_line(input) {
             IResult::Error(_) => return Err(HttpParserError::BadHeader),
             IResult::Incomplete(_) => ParserReturn(input, BufferState::Incomplete),
@@ -138,13 +211,16 @@ impl HttpParser {
                     ParserReturn(i, BufferState::Ready(ParserState::Done))
                 } else {
                     let body_type = self.body_type;
-                    cb.on_message_begin(self, body_type);
+                    self.expect_body = cb.on_headers_finished(self, body_type);
 
-                    let body_state = match self.body_type {
-                        BodyType::Chunked => BodyTypeState::Chunked(ChunkedState::Header),
-                        BodyType::Length(len) => BodyTypeState::Lenth(len),
-                        BodyType::EOF => BodyTypeState::EOF,
-                        BodyType::NoBody => BodyTypeState::NoBody,
+                    let body_state = match self.expect_body {
+                        ExpectBody::Maybe => match self.body_type {
+                            BodyType::Chunked => BodyTypeState::Chunked(ChunkedState::Header),
+                            BodyType::Length(len) => BodyTypeState::Lenth(len),
+                            BodyType::EOF => BodyTypeState::EOF,
+                            BodyType::NoBody => BodyTypeState::NoBody,
+                        },
+                        ExpectBody::No => BodyTypeState::NoBody,
                     };
 
                     ParserReturn(i, BufferState::Ready(ParserState::Body(body_state)))
@@ -153,11 +229,13 @@ impl HttpParser {
         })
     }
 
-    fn parse_body<'r, T: HttpCallbacks>(&mut self, cb: &mut T, input: &'r [u8], body_type: BodyTypeState)
-    -> Result<ParserReturn<'r>, HttpParserError> {
+    fn parse_body<'r, T: HttpMessageCallbacks>(&mut self, cb: &mut T, input: &'r [u8], body_type: BodyTypeState)
+    -> HttpParserResult<ParserReturn<'r>> {
         Ok(match body_type {
             BodyTypeState::Lenth(size) => {
-                if input.len() < size {
+                if input.len() == 0 && size != 0 {
+                    return Ok(ParserReturn(input, BufferState::Incomplete));
+                } else if input.len() < size {
                     cb.on_chunk(self, input);
                     ParserReturn(
                         b"",
@@ -166,10 +244,6 @@ impl HttpParser {
                         )
                     )
                 } else {
-                    if input.len() == 0 {
-                        return Ok(ParserReturn(input, BufferState::Incomplete));
-                    }
-
                     cb.on_chunk(self, &input[..size]);
                     ParserReturn(&input[size..], BufferState::Ready(ParserState::Done))
                 }

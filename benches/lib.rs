@@ -1,11 +1,11 @@
 #![feature(test)]
+#![allow(unused_variables)]
 
 extern crate nom_http;
 extern crate test;
 
 use nom_http::*;
 use std::collections::HashMap;
-use std::str;
 
 
 const TEST_REQUEST_CHUNKED : &'static [u8] =
@@ -76,9 +76,9 @@ macro_rules! benchmark_strings {
             #[bench]
             fn $name(b: &mut test::Bencher) {
                 let mut cb = TestHttpCallback::new();
-                let mut http_parser = HttpParser::new();
+                let mut http_parser = HttpParser::new(ParserType::Request);
                 b.iter(
-                    || http_parser.parse_http(&mut cb, $s)
+                    || http_parser.parse_request(&mut cb, $s)
                 );
             }
         )*
@@ -120,7 +120,7 @@ impl TestHttpCallback {
     }
 }
 
-impl HttpCallbacks for TestHttpCallback {
+impl HttpRequestCallbacks for TestHttpCallback {
     fn on_request_line(&mut self, parser: &mut HttpParser, request: &RequestLine) {
         // self.method = String::from_utf8(request.method.to_owned()).unwrap();
         // self.path = String::from_utf8(request.path.to_owned()).unwrap();
@@ -129,12 +129,16 @@ impl HttpCallbacks for TestHttpCallback {
         //     util::dec_buf_to_int(request.version.1).unwrap(),
         // );
     }
+}
 
+impl HttpMessageCallbacks for TestHttpCallback {
     fn on_header(&mut self, parser: &mut HttpParser, name: &[u8], value: &[u8]) {
         // self.headers.insert(String::from_utf8(name.to_owned()).unwrap(), String::from_utf8(value.to_owned()).unwrap());
     }
 
-    fn on_message_begin(&mut self, parser: &mut HttpParser, body_type: BodyType) {}
+    fn on_headers_finished(&mut self, parser: &mut HttpParser, body_type: BodyType) -> ExpectBody {
+        ExpectBody::Maybe
+    }
 
     fn on_chunk(&mut self, parser: &mut HttpParser, data: &[u8]) {
         // self.chunks.push_str(str::from_utf8(data).unwrap());
