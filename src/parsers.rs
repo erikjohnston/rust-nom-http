@@ -400,6 +400,26 @@ fn test_request_line_incomplete() {
 }
 
 #[test]
+fn test_header_incomplete() {
+    let incomplete = [
+        &b"C"[..],
+        &b"Co"[..],
+        &b"Content-Length:"[..],
+        &b"Content-Length: 52"[..],
+        &b"Content-Length: 52\n"[..],
+    ];
+
+    for i in incomplete.iter() {
+        let res = header(i);
+        match res {
+            IResult::Incomplete(_) => {},
+            d@ _ => panic!("Not incomplete: {:?}: {:?}", String::from_utf8_lossy(i), d)
+        }
+    }
+}
+
+
+#[test]
 fn test_chunk_param_incomplete() {
     let incomplete = [
         &b"5;"[..],

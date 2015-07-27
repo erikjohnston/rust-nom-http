@@ -23,10 +23,10 @@ macro_rules! create_test {
                 // to concat identifiers
                 let input = $input_expr;
                 {
-                    let mut http_parser = HttpParser::new();
+                    let mut http_parser = HttpParser::new(ParserType::Request);
                     for _ in 0..3 {  // Tests to ensure we can run the parser multiple times
                         let mut cb = TestHttpCallback::new();
-                        http_parser.parse_http(
+                        http_parser.parse_request(
                             &mut cb,
                             input
                         ).unwrap();
@@ -41,15 +41,16 @@ macro_rules! create_test {
                         assert_eq!($expected, cb);
                     }
                 }
+                println!("Passed full buffer tests.");
                 {
-                    let mut http_parser = HttpParser::new();
+                    let mut http_parser = HttpParser::new(ParserType::Request);
 
                     for _ in 0..3 {  // Tests to ensure we can run the parser multiple times
                         let mut cb = TestHttpCallback::new();
                         let mut start = 0;
                         for i in 1..input.len() + 1 {
                             println!("Input: {:?}", String::from_utf8_lossy(&input[start..i]));
-                            start += http_parser.parse_http(
+                            start += http_parser.parse_request(
                                 &mut cb,
                                 &input[start..i],
                             ).unwrap();
@@ -153,8 +154,8 @@ Accept-Language: en-GB,en-US;q=0.8,en;q=0.6,nb;q=0.4
 #[test]
 fn test_consumer() {
     let mut cb = TestHttpCallback::new();
-    let mut http_parser = HttpParser::new();
-    http_parser.parse_http(
+    let mut http_parser = HttpParser::new(ParserType::Request);
+    http_parser.parse_request(
         &mut cb, b"GET /test_url/ HTTP/1.0\r\nContent-Length: 5\r\n\r\nHello"
     ).unwrap();
 

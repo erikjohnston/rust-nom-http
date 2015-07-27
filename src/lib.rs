@@ -76,7 +76,7 @@ impl HttpParser {
         }
     }
 
-    pub fn parse_request<T: HttpRequestCallbacks + HttpResponseCallbacks>(&mut self, cb: &mut T, input: &[u8])
+    pub fn parse_request<T: HttpRequestCallbacks>(&mut self, cb: &mut T, input: &[u8])
     -> HttpParserResult<usize> {
         let mut curr_input = input;
         if let ParserState::FirstLine = self.current_state {
@@ -93,18 +93,15 @@ impl HttpParser {
             }
         }
 
-        self.parse_http(cb, curr_input)
+        self.parse_http(cb, curr_input).map(|res| res + input.len() - curr_input.len())
     }
 
-    pub fn parse_http<T: HttpRequestCallbacks + HttpResponseCallbacks>(&mut self, cb: &mut T, input: &[u8])
+    fn parse_http<T: HttpMessageCallbacks>(&mut self, cb: &mut T, input: &[u8])
     -> HttpParserResult<usize> {
         let mut curr_input = input;
         loop {
             let res = match self.current_state {
-                ParserState::FirstLine => match self.parser_type {
-                    ParserType::Request => try!(self.parse_request_line(cb, curr_input)),
-                    ParserType::Response => try!(self.parse_response_line(cb, curr_input)),
-                },
+                ParserState::FirstLine => unreachable!(),
                 ParserState::Headers => try!(self.parse_header(cb, curr_input)),
                 ParserState::HeaderEnd => try!(self.parse_header_end(cb, curr_input)),
                 ParserState::Body(body_type) => try!(self.parse_body(cb, curr_input, body_type)),
