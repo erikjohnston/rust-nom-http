@@ -52,7 +52,7 @@ pub trait HttpRequestCallbacks : HttpMessageCallbacks {
 }
 
 pub trait HttpResponseCallbacks: HttpMessageCallbacks {
-    fn on_response_line(&mut self, parser: &mut HttpParser, request: &ResponseLine);
+    fn on_response_line(&mut self, parser: &mut HttpParser, response: &ResponseLine);
 }
 
 
