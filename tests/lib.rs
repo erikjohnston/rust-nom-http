@@ -47,12 +47,12 @@ macro_rules! create_request_test {
 
                     for _ in 0..3 {  // Tests to ensure we can run the parser multiple times
                         let mut cb = TestRequestHttpCallback::new();
-                        let mut start = 0;
-                        for i in 1..input.len() + 1 {
-                            println!("Input: {:?}", String::from_utf8_lossy(&input[start..i]));
-                            start += http_parser.parse_request(
+                        let mut curr_input = &input[..];
+                        for _ in 1..input.len() + 1 {
+                            println!("Input: {:?}", String::from_utf8_lossy(curr_input));
+                            curr_input = http_parser.parse_request(
                                 &mut cb,
-                                &input[start..i],
+                                curr_input,
                             ).unwrap();
                         }
                         assert_eq!($expected, cb);
@@ -88,12 +88,12 @@ macro_rules! create_response_test {
 
                     for _ in 0..3 {  // Tests to ensure we can run the parser multiple times
                         let mut cb = TestResponseHttpCallback::new($expected.expect_body);
-                        let mut start = 0;
-                        for i in 1..input.len() + 1 {
-                            println!("Input: {:?}", String::from_utf8_lossy(&input[start..i]));
-                            start += http_parser.parse_response(
+                        let mut curr_input = &input[..];
+                        for _ in 1..input.len() + 1 {
+                            println!("Input: {:?}", String::from_utf8_lossy(curr_input));
+                            curr_input = http_parser.parse_response(
                                 &mut cb,
-                                &input[start..i],
+                                curr_input,
                             ).unwrap();
                         }
                         assert_eq!($expected, cb);

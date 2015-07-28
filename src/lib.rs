@@ -84,8 +84,8 @@ impl HttpParser {
         }
     }
 
-    pub fn parse_request<T: HttpRequestCallbacks>(&mut self, cb: &mut T, input: &[u8])
-    -> HttpParserResult<usize> {
+    pub fn parse_request<'r, T: HttpRequestCallbacks>(&mut self, cb: &mut T, input: &'r [u8])
+    -> HttpParserResult<&'r [u8]> {
         let mut curr_input = input;
         if let ParserState::FirstLine = self.current_state {
             let res = try!(self.parse_request_line(cb, curr_input));
@@ -96,16 +96,16 @@ impl HttpParser {
                     self.current_state = next_state;
                 },
                 BufferState::Incomplete => {
-                    return Ok(input.len() - curr_input.len());
+                    return Ok(curr_input);
                 }
             }
         }
 
-        self.parse_http(cb, curr_input).map(|res| res + input.len() - curr_input.len())
+        self.parse_http(cb, curr_input)
     }
 
-    pub fn parse_response<T: HttpResponseCallbacks>(&mut self, cb: &mut T, input: &[u8])
-    -> HttpParserResult<usize> {
+    pub fn parse_response<'r, T: HttpResponseCallbacks>(&mut self, cb: &mut T, input: &'r [u8])
+    -> HttpParserResult<&'r [u8]> {
         let mut curr_input = input;
         if let ParserState::FirstLine = self.current_state {
             let res = try!(self.parse_response_line(cb, curr_input));
@@ -116,16 +116,16 @@ impl HttpParser {
                     self.current_state = next_state;
                 },
                 BufferState::Incomplete => {
-                    return Ok(input.len() - curr_input.len());
+                    return Ok(curr_input);
                 }
             }
         }
 
-        self.parse_http(cb, curr_input).map(|res| res + input.len() - curr_input.len())
+        self.parse_http(cb, curr_input)
     }
 
-    fn parse_http<T: HttpMessageCallbacks>(&mut self, cb: &mut T, input: &[u8])
-    -> HttpParserResult<usize> {
+    fn parse_http<'r, T: HttpMessageCallbacks>(&mut self, cb: &mut T, input: &'r [u8])
+    -> HttpParserResult<&'r [u8]> {
         let mut curr_input = input;
         loop {
             let res = match self.current_state {
@@ -138,7 +138,7 @@ impl HttpParser {
                     self.body_type = BodyType::NoBody;
                     self.body_finished = false;
                     self.current_state = ParserState::FirstLine;
-                    return Ok(input.len() - curr_input.len());
+                    return Ok(curr_input);
                 }
             };
 
@@ -149,7 +149,7 @@ impl HttpParser {
                     self.current_state = next_state;
                 },
                 BufferState::Incomplete => {
-                    return Ok(input.len() - curr_input.len());
+                    return Ok(curr_input);
                 }
             }
         }
