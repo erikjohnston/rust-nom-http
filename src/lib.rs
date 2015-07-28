@@ -67,7 +67,7 @@ pub struct HttpParser {
     current_state: ParserState,
     body_finished: bool,
     expect_body: ExpectBody,
-    // parser_type: ParserType,
+    parser_type: ParserType,
 }
 
 impl HttpParser {
@@ -79,7 +79,7 @@ impl HttpParser {
                 ParserType::Response => BodyType::EOF,
             },
             body_finished: false,
-            // parser_type: parser_type,
+            parser_type: parser_type,
             expect_body: ExpectBody::Maybe,
         }
     }
@@ -135,7 +135,7 @@ impl HttpParser {
                 ParserState::Body(body_type) => try!(self.parse_body(cb, curr_input, body_type)),
                 ParserState::Done => {
                     cb.on_end(self);
-                    self.body_type = match parser_type {
+                    self.body_type = match self.parser_type {
                         ParserType::Request => BodyType::NoBody,
                         ParserType::Response => BodyType::EOF,
                     };
