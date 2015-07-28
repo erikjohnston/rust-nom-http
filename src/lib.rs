@@ -135,9 +135,13 @@ impl HttpParser {
                 ParserState::Body(body_type) => try!(self.parse_body(cb, curr_input, body_type)),
                 ParserState::Done => {
                     cb.on_end(self);
-                    self.body_type = BodyType::NoBody;
+                    self.body_type = match parser_type {
+                        ParserType::Request => BodyType::NoBody,
+                        ParserType::Response => BodyType::EOF,
+                    };
                     self.body_finished = false;
                     self.current_state = ParserState::FirstLine;
+                    self.expect_body = ExpectBody::Maybe;
                     return Ok(curr_input);
                 }
             };
