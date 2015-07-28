@@ -61,7 +61,12 @@ pub trait HttpResponseCallbacks: HttpMessageCallbacks {
 
 pub enum ParserType { Request, Response, }
 
-
+/// The HttpParser object.
+///
+/// This stores the current state of the parsing of a stream of bytes. Each stream of bytes
+/// has its own parser.
+///
+/// Each HttpParser can only process either requests or responses, not both.
 pub struct HttpParser {
     pub body_type: BodyType,
     current_state: ParserState,
@@ -71,6 +76,9 @@ pub struct HttpParser {
 }
 
 impl HttpParser {
+    /// Constructs a new HttpParser.
+    ///
+    /// Must be told whether the HttpParser will be used to parse requests or responses.
     pub fn new(parser_type: ParserType) -> HttpParser {
         HttpParser {
             current_state: ParserState::FirstLine,
