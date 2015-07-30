@@ -1,5 +1,63 @@
 
+pub use nom_parsers::{RequestLine, ResponseLine};
+use std::collections::HashMap;
+use std::str;
+
 use errors::IntegerDecodeError;
+
+use parser::*;
+
+
+#[derive(PartialEq,Eq,Debug)]
+struct SimpleRequestCallback<'r> {
+    method: &'r str,
+    path: &'r str,
+    version: (u8, u8),
+    headers: HashMap< &'r str,  &'r [u8]>,
+    chunks: Vec<u8>,
+    finished: bool,
+}
+
+impl <'r> SimpleRequestCallback<'r> {
+    fn new() -> SimpleRequestCallback<'r> {
+        SimpleRequestCallback{
+            method: "",
+            path: "",
+            version: (0, 0),
+            headers: HashMap::new(),
+            chunks: Vec::new(),
+            finished: false,
+        }
+    }
+}
+
+impl <'r> HttpRequestCallbacks<'r> for SimpleRequestCallback<'r> {
+    fn on_request_line(&mut self, _: &mut HttpParser, request: &'r RequestLine) {
+        self.method = str::from_utf8(request.method).unwrap();
+        self.path = str::from_utf8(request.path).unwrap();
+        self.version = (
+            request.version.0 - b'0',
+            request.version.1 - b'1',
+        );
+    }
+
+}
+
+impl <'r> HttpMessageCallbacks<'r> for SimpleRequestCallback<'r> {
+    fn on_header(&mut self, _: &mut HttpParser, name: &'r [u8], value: &'r [u8]) {
+        self.headers.insert(str::from_utf8(name).unwrap(), value);
+    }
+    fn on_headers_finished(&mut self, _: &mut HttpParser, body_type: BodyType) -> ExpectBody {
+        ExpectBody::Maybe
+    }
+    fn on_chunk(&mut self, _: &mut HttpParser, data: &[u8]) {
+        self.chunks.push_all(data);
+    }
+    fn on_end(&mut self, _: &mut HttpParser) {
+        self.finished = true;
+    }
+}
+
 
 pub fn hex_buf_to_int(buf: &[u8]) -> Result<usize, IntegerDecodeError> {
     if buf.len() >= 8 {  // TODO: Replace with usize::BITS

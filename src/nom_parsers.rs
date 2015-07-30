@@ -67,18 +67,18 @@ fn not_vspace(input: &[u8]) -> IResult<&[u8], &[u8]> {
 pub struct RequestLine<'r> {
     pub method: &'r [u8],
     pub path: &'r [u8],
-    pub version: (&'r [u8], &'r [u8]),
+    pub version: (u8, u8),
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct ResponseLine<'r> {
-    pub version: (&'r [u8], &'r [u8]),
+    pub version: (u8, u8),
     pub code: u16,
     pub phrase: &'r [u8],
 }
 
 named!(
-    pub response_line <&[u8], ResponseLine>,
+    pub response_line <&'r [u8], ResponseLine>,
     chain!(
         tag!("HTTP/")       ~
         major: digit        ~
@@ -90,12 +90,12 @@ named!(
         phrase: not_vspace  ~
         tag!("\r")?         ~
         tag!("\n")          ,
-        || {ResponseLine{version: (major, minor), code: code, phrase: phrase}}
+        || {ResponseLine{version: (major[0], minor[0]), code: code, phrase: phrase}}
     )
 );
 
 named!(
-    pub request_line <&[u8], RequestLine>,
+    pub request_line <&'r [u8], RequestLine>,
     chain!(
         method: not_space   ~
         space               ~
@@ -108,7 +108,7 @@ named!(
         space?              ~
         tag!("\r")?         ~
         tag!("\n")          ,
-        || {RequestLine{method: method, path:path, version: (major, minor)}}
+        || {RequestLine{method: method, path:path, version: (major[0], minor[0])}}
     )
 );
 
