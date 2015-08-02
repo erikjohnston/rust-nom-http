@@ -9,17 +9,17 @@ use parser::*;
 
 
 #[derive(PartialEq,Eq,Debug)]
-struct SimpleRequestCallback<'r> {
-    method: &'r str,
-    path: &'r str,
-    version: (u8, u8),
-    headers: HashMap< &'r str,  &'r [u8]>,
-    chunks: Vec<u8>,
-    finished: bool,
+pub struct SimpleRequestCallback<'r> {
+    pub method: &'r str,
+    pub path: &'r str,
+    pub version: (u8, u8),
+    pub headers: HashMap< &'r str,  &'r [u8]>,
+    pub chunks: Vec<u8>,
+    pub finished: bool,
 }
 
 impl <'r> SimpleRequestCallback<'r> {
-    fn new() -> SimpleRequestCallback<'r> {
+    pub fn new() -> SimpleRequestCallback<'r> {
         SimpleRequestCallback{
             method: "",
             path: "",
@@ -107,4 +107,17 @@ pub fn dec_buf_to_int(buf: &[u8]) -> Result<usize, IntegerDecodeError> {
         }
     }
     Ok(size)
+}
+
+#[test]
+fn test_hex() {
+    assert_eq!(245, hex_buf_to_int(b"F5").unwrap());
+    assert_eq!(245, hex_buf_to_int(b"f5").unwrap());
+    assert_eq!(9, hex_buf_to_int(b"9").unwrap());
+}
+
+#[test]
+fn test_dec() {
+    assert_eq!(245, dec_buf_to_int(b"245").unwrap());
+    assert_eq!(9, dec_buf_to_int(b"9").unwrap());
 }
