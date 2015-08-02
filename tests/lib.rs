@@ -268,7 +268,7 @@ fn test_consumer() {
 struct TestRequestHttpCallback {
     method: String,
     path: String,
-    version: (usize, usize),
+    version: (u8, u8),
     headers: HashMap<String, String>,
     chunks: String,
     finished: bool,
@@ -287,20 +287,17 @@ impl TestRequestHttpCallback {
     }
 }
 
-impl HttpRequestCallbacks for TestRequestHttpCallback {
-    fn on_request_line(&mut self, _: &mut HttpParser, request: &RequestLine) {
+impl <'r> HttpRequestCallbacks<'r> for TestRequestHttpCallback {
+    fn on_request_line(&mut self, _: &mut HttpParser, request: RequestLine) {
         println!("on_request_line");
         self.method = String::from_utf8(request.method.to_owned()).unwrap();
         self.path = String::from_utf8(request.path.to_owned()).unwrap();
-        self.version = (
-            util::dec_buf_to_int(request.version.0).unwrap(),
-            util::dec_buf_to_int(request.version.1).unwrap(),
-        );
+        self.version = request.version;
     }
 
 }
 
-impl HttpMessageCallbacks for TestRequestHttpCallback {
+impl <'r> HttpMessageCallbacks<'r> for TestRequestHttpCallback {
     fn on_header(&mut self, _: &mut HttpParser, name: &[u8], value: &[u8]) {
         println!(
             "on_header name: {:?}, value: {:?}",
@@ -327,7 +324,7 @@ impl HttpMessageCallbacks for TestRequestHttpCallback {
 
 #[derive(PartialEq,Eq,Debug)]
 struct TestResponseHttpCallback {
-    version: (usize, usize),
+    version: (u8, u8),
     code: u16,
     phrase: String,
     headers: HashMap<String, String>,
@@ -350,20 +347,17 @@ impl TestResponseHttpCallback {
     }
 }
 
-impl HttpResponseCallbacks for TestResponseHttpCallback {
-    fn on_response_line(&mut self, _: &mut HttpParser, response: &ResponseLine) {
+impl <'r> HttpResponseCallbacks<'r> for TestResponseHttpCallback {
+    fn on_response_line(&mut self, _: &mut HttpParser, response: ResponseLine) {
         println!("on_response_line");
-        self.version = (
-            util::dec_buf_to_int(response.version.0).unwrap(),
-            util::dec_buf_to_int(response.version.1).unwrap(),
-        );
+        self.version = response.version;
         self.code = response.code;
         self.phrase = String::from_utf8(response.phrase.to_owned()).unwrap();
     }
 
 }
 
-impl HttpMessageCallbacks for TestResponseHttpCallback {
+impl <'r> HttpMessageCallbacks<'r> for TestResponseHttpCallback {
     fn on_header(&mut self, _: &mut HttpParser, name: &[u8], value: &[u8]) {
         println!(
             "on_header name: {:?}, value: {:?}",

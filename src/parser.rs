@@ -46,11 +46,11 @@ pub trait HttpMessageCallbacks<'r> {
 }
 
 pub trait HttpRequestCallbacks<'r> : HttpMessageCallbacks<'r> {
-    fn on_request_line(&mut self, parser: &mut HttpParser, request: &'r RequestLine);
+    fn on_request_line(&mut self, parser: &mut HttpParser, request: RequestLine<'r>);
 }
 
 pub trait HttpResponseCallbacks<'r>: HttpMessageCallbacks<'r> {
-    fn on_response_line(&mut self, parser: &mut HttpParser, response: &'r ResponseLine);
+    fn on_response_line(&mut self, parser: &mut HttpParser, response: ResponseLine<'r>);
 }
 
 
@@ -168,7 +168,7 @@ impl HttpParser {
             IResult::Error(_) => return Err(HttpParserError::BadFirstLine),
             IResult::Incomplete(_) => ParserReturn(input, BufferState::Incomplete),
             IResult::Done(i, request) => {
-                cb.on_request_line(self, &request);
+                cb.on_request_line(self, request);
                 ParserReturn(i, BufferState::Ready(ParserState::Headers))
             }
         })
@@ -180,7 +180,7 @@ impl HttpParser {
             IResult::Error(_) => return Err(HttpParserError::BadFirstLine),
             IResult::Incomplete(_) => ParserReturn(input, BufferState::Incomplete),
             IResult::Done(i, response) => {
-                cb.on_response_line(self, &response);
+                cb.on_response_line(self, response);
                 ParserReturn(i, BufferState::Ready(ParserState::Headers))
             }
         })

@@ -32,12 +32,12 @@ impl <'r> SimpleRequestCallback<'r> {
 }
 
 impl <'r> HttpRequestCallbacks<'r> for SimpleRequestCallback<'r> {
-    fn on_request_line(&mut self, _: &mut HttpParser, request: &'r RequestLine) {
+    fn on_request_line(&mut self, _: &mut HttpParser, request: RequestLine<'r>) {
         self.method = str::from_utf8(request.method).unwrap();
         self.path = str::from_utf8(request.path).unwrap();
         self.version = (
-            request.version.0 - b'0',
-            request.version.1 - b'1',
+            request.version.0,
+            request.version.1,
         );
     }
 
@@ -51,7 +51,10 @@ impl <'r> HttpMessageCallbacks<'r> for SimpleRequestCallback<'r> {
         ExpectBody::Maybe
     }
     fn on_chunk(&mut self, _: &mut HttpParser, data: &[u8]) {
-        self.chunks.push_all(data);
+        // TODO: push_all?
+        for d in data {
+            self.chunks.push(*d);
+        }
     }
     fn on_end(&mut self, _: &mut HttpParser) {
         self.finished = true;

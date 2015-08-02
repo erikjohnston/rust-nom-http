@@ -77,8 +77,8 @@ pub struct ResponseLine<'r> {
     pub phrase: &'r [u8],
 }
 
-named!(
-    pub response_line <&'r [u8], ResponseLine>,
+named!{
+    pub response_line<&[u8], ResponseLine>,
     chain!(
         tag!("HTTP/")       ~
         major: digit        ~
@@ -90,12 +90,16 @@ named!(
         phrase: not_vspace  ~
         tag!("\r")?         ~
         tag!("\n")          ,
-        || {ResponseLine{version: (major[0], minor[0]), code: code, phrase: phrase}}
+        || {ResponseLine{
+            version: (major[0] - b'0', minor[0] - b'0'),
+            code: code,
+            phrase: phrase
+        }}
     )
-);
+}
 
 named!(
-    pub request_line <&'r [u8], RequestLine>,
+    pub request_line <&[u8], RequestLine>,
     chain!(
         method: not_space   ~
         space               ~
@@ -108,7 +112,13 @@ named!(
         space?              ~
         tag!("\r")?         ~
         tag!("\n")          ,
-        || {RequestLine{method: method, path:path, version: (major[0], minor[0])}}
+        || {
+            RequestLine{
+                method: method,
+                path: path,
+                version: (major[0] - b'0', minor[0] - b'0'),
+            }
+        }
     )
 );
 
@@ -352,7 +362,7 @@ test_parser!(
 
 test_parser!(
     request_line,
-    RequestLine{method: b"GET", path: b"/test_url/", version: (b"1", b"0")} => [
+    RequestLine{method: b"GET", path: b"/test_url/", version: (1, 0)} => [
         test_re_l_1 => b"GET /test_url/ HTTP/1.0\r\n",
         test_re_l_2 => b"GET /test_url/ HTTP/1.0\n",
         test_re_l_3 => b"GET  /test_url/ \t HTTP/1.0\t  \n",
@@ -361,7 +371,7 @@ test_parser!(
 
 test_parser!(
     response_line,
-    ResponseLine{version: (b"1", b"0"), code: 500u16, phrase: b"Internal Server Error"} => [
+    ResponseLine{version: (1, 0), code: 500u16, phrase: b"Internal Server Error"} => [
         test_res_l_1 => b"HTTP/1.0 500 Internal Server Error\r\n",
         test_res_l_2 => b"HTTP/1.0 500 Internal Server Error\n",
         test_res_l_3 => b"HTTP/1.0  500  \t Internal Server Error\r\n",
