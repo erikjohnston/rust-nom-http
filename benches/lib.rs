@@ -101,7 +101,7 @@ benchmark_strings! {
 pub struct TestHttpCallback {
     pub method: String,
     pub path: String,
-    pub version: (usize, usize),
+    pub version: (u8, u8),
     pub headers: HashMap<String, String>,
     pub chunks: String,
     pub finished: bool,
@@ -120,8 +120,8 @@ impl TestHttpCallback {
     }
 }
 
-impl HttpRequestCallbacks for TestHttpCallback {
-    fn on_request_line(&mut self, parser: &mut HttpParser, request: &RequestLine) {
+impl <'r> HttpRequestCallbacks<'r> for TestHttpCallback {
+    fn on_request_line(&mut self, parser: &mut HttpParser, request: RequestLine) {
         // self.method = String::from_utf8(request.method.to_owned()).unwrap();
         // self.path = String::from_utf8(request.path.to_owned()).unwrap();
         // self.version = (
@@ -131,7 +131,7 @@ impl HttpRequestCallbacks for TestHttpCallback {
     }
 }
 
-impl HttpMessageCallbacks for TestHttpCallback {
+impl <'r> HttpMessageCallbacks<'r> for TestHttpCallback {
     fn on_header(&mut self, parser: &mut HttpParser, name: &[u8], value: &[u8]) {
         // self.headers.insert(String::from_utf8(name.to_owned()).unwrap(), String::from_utf8(value.to_owned()).unwrap());
     }
