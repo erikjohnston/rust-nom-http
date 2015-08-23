@@ -2,6 +2,7 @@
 #[macro_use]
 extern crate nom;
 
+pub mod integer_decoder;
 pub mod util;
 pub mod errors;
 

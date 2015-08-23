@@ -1,7 +1,7 @@
 
 use nom::{IResult, Needed, Err, space, digit, is_digit};
 
-use util::hex_buf_to_int;
+use integer_decoder::hex_buf_to_int;
 
 
 // named!(not_space, take_until_either!(" \t"));

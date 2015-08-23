@@ -3,7 +3,7 @@ use std::ascii::AsciiExt;
 
 
 use errors::*;
-use util;
+use integer_decoder;
 
 use nom_parsers;
 use nom_parsers::{RequestLine, ResponseLine};
@@ -358,7 +358,7 @@ fn body_type_from_header(name: &[u8], value: &[u8]) -> Result<Option<BodyType>, 
             return Ok(Some(BodyType::Chunked))
         }
     } else if b"content-length".eq_ignore_ascii_case(name) {
-        return match util::dec_buf_to_int(value) {
+        return match integer_decoder::dec_buf_to_int(value) {
             Ok(size) => Ok(Some(BodyType::Length(size))),
             Err(e) => Err(HttpHeaderParseError::ContentLength(e)),
         };
