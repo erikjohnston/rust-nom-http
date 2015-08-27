@@ -3,7 +3,7 @@
 extern crate nom;
 
 pub mod integer_decoder;
-pub mod util;
+pub mod buffered;
 pub mod errors;
 
 
