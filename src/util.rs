@@ -14,6 +14,7 @@ pub struct FullRequest {
     pub version: (u8, u8),
     pub headers: HashMap<String, Vec<u8>>,
     pub chunks: Vec<u8>,
+    pub finished: bool,
 }
 
 impl <'a> From<FullRequestCallback<'a>> for FullRequest {
@@ -28,6 +29,7 @@ impl <'a> From<FullRequestCallback<'a>> for FullRequest {
             version: r.version,
             headers: headers,
             chunks: r.chunks,
+            finished: r.finished,
         }
     }
 }
