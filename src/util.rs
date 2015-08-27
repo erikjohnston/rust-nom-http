@@ -8,7 +8,7 @@ use parser::*;
 
 
 #[derive(PartialEq,Eq,Debug)]
-pub struct FullRequest {
+pub struct BufferedRequest {
     pub method: String,
     pub path: String,
     pub version: (u8, u8),
@@ -17,13 +17,13 @@ pub struct FullRequest {
     pub finished: bool,
 }
 
-impl <'a> From<FullRequestCallback<'a>> for FullRequest {
-    fn from(r: FullRequestCallback<'a>) -> FullRequest {
+impl <'a> From<BufferedRequestCallback<'a>> for BufferedRequest {
+    fn from(r: BufferedRequestCallback<'a>) -> BufferedRequest {
         let mut headers = HashMap::with_capacity(r.headers.len());
         for (key, value) in r.headers {
             headers.insert(key.into(), value.into());
         }
-        FullRequest {
+        BufferedRequest {
             method: r.method.to_owned(),
             path: r.path.to_owned(),
             version: r.version,
@@ -36,7 +36,7 @@ impl <'a> From<FullRequestCallback<'a>> for FullRequest {
 
 
 #[derive(PartialEq,Eq,Debug)]
-pub struct FullRequestCallback<'r> {
+pub struct BufferedRequestCallback<'r> {
     pub method: &'r str,
     pub path: &'r str,
     pub version: (u8, u8),
@@ -45,9 +45,9 @@ pub struct FullRequestCallback<'r> {
     pub finished: bool,
 }
 
-impl <'r> FullRequestCallback<'r> {
-    pub fn new() -> FullRequestCallback<'r> {
-        FullRequestCallback{
+impl <'r> BufferedRequestCallback<'r> {
+    pub fn new() -> BufferedRequestCallback<'r> {
+        BufferedRequestCallback{
             method: "",
             path: "",
             version: (0, 0),
@@ -59,7 +59,7 @@ impl <'r> FullRequestCallback<'r> {
 }
 
 
-impl <'r> HttpRequestCallbacks<'r> for FullRequestCallback<'r> {
+impl <'r> HttpRequestCallbacks<'r> for BufferedRequestCallback<'r> {
     fn on_request_line(&mut self, _: &mut HttpParser, request: RequestLine<'r>) {
         self.method = str::from_utf8(request.method).unwrap();
         self.path = str::from_utf8(request.path).unwrap();
@@ -71,7 +71,7 @@ impl <'r> HttpRequestCallbacks<'r> for FullRequestCallback<'r> {
 
 }
 
-impl <'r> HttpMessageCallbacks<'r> for FullRequestCallback<'r> {
+impl <'r> HttpMessageCallbacks<'r> for BufferedRequestCallback<'r> {
     fn on_header(&mut self, _: &mut HttpParser, name: &'r [u8], value: &'r [u8]) {
         self.headers.insert(str::from_utf8(name).unwrap(), value);
     }
