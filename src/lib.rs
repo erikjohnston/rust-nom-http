@@ -7,8 +7,8 @@ pub mod buffered;
 pub mod errors;
 
 
-pub mod nom_parsers;
-pub use nom_parsers::{RequestLine, ResponseLine};
+mod nom_parsers;
+use nom_parsers::{RequestLine, ResponseLine};
 
 pub mod parser;
 pub use parser::{

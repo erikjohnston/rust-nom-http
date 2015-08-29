@@ -1,5 +1,5 @@
 
-pub use nom_parsers::{RequestLine, ResponseLine};
+use nom_parsers::{RequestLine, ResponseLine};
 use std::collections::HashMap;
 use std::str;
 use std::convert::From;
