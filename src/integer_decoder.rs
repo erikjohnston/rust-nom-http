@@ -53,10 +53,30 @@ fn test_hex() {
     assert_eq!(245, hex_buf_to_int(b"F5").unwrap());
     assert_eq!(245, hex_buf_to_int(b"f5").unwrap());
     assert_eq!(9, hex_buf_to_int(b"9").unwrap());
+
+    assert_eq!(
+        Result::Err(IntegerDecodeError::TooLong(10)),
+        hex_buf_to_int(b"0123456789")
+    );
+
+    assert_eq!(
+        Result::Err(IntegerDecodeError::InvalidChar(b'X')),
+        hex_buf_to_int(b"aBcDXb")
+    );
 }
 
 #[test]
 fn test_dec() {
     assert_eq!(245, dec_buf_to_int(b"245").unwrap());
     assert_eq!(9, dec_buf_to_int(b"9").unwrap());
+
+    assert_eq!(
+        Result::Err(IntegerDecodeError::TooLong(10)),
+        dec_buf_to_int(b"0123456789")
+    );
+
+    assert_eq!(
+        Result::Err(IntegerDecodeError::InvalidChar(b'X')),
+        dec_buf_to_int(b"0125X5")
+    );
 }

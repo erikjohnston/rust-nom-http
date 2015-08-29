@@ -3,7 +3,7 @@ use std::fmt;
 use std::error;
 use std::convert;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum IntegerDecodeError { TooLong(usize), InvalidChar(u8) }
 
 #[derive(Debug)]
