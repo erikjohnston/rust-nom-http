@@ -8,7 +8,6 @@ pub mod errors;
 
 
 mod nom_parsers;
-use nom_parsers::{RequestLine, ResponseLine};
 
 pub mod parser;
 pub use parser::{
